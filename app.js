@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '23';
+const VERSION = '24';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -258,7 +258,11 @@ async function estimar(it) {
     throw { nota: 'sin saldo en OpenRouter', final: true };
   }
   if (r.status === 401 || r.status === 403) throw { nota: 'clave inválida', final: true };
-  if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) throw { nota: `error ${r.status}`, final: true };
+  if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) {
+    // con el motivo: si un día retiran el modelo, la fila lo dice en vez de un «error 400» mudo
+    const msg = String((await r.json().catch(() => ({}))).error?.message || '').slice(0, 80);
+    throw { nota: `error ${r.status}${msg ? ' · ' + msg : ''}`, final: true };
+  }
   if (!r.ok) throw { nota: 'reintentando' };
   let est;
   try {
