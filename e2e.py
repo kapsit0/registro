@@ -331,6 +331,25 @@ with sync_playwright() as p:
     ctx.set_offline(False)
     print("v17: fotos de la galería a su hora ok")
 
+    # v23: 402 «in_flight» (hay saldo, pero no para varias a la vez) se reintenta solo: no queda en rojo ni dice «sin saldo»
+    # solo Chrome: en WebKit, con el service worker activo, page.route no alcanza la llamada a OpenRouter
+    if MOTOR == "chrome":
+        API = "https://openrouter.ai/api/v1/chat/completions"
+        cors = {"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "POST"}
+        def en_vuelo(route):
+            if route.request.method == "OPTIONS": return route.fulfill(status=204, headers=cors)
+            route.fulfill(status=402, headers=cors, content_type="application/json",
+                          body=json.dumps({"error": {"code": 402, "message": "in flight", "metadata": {"reason": "in_flight_budget_exhausted"}}}))
+        pg.route(API, en_vuelo)
+        pg.fill("#c-texto", "1 kiwi"); pg.press("#c-texto", "Enter")
+        fila = pg.locator("#c-lista li[data-id]", has_text="kiwi")
+        expect(fila).to_contain_text("reintentando")
+        expect(fila).not_to_have_class(re.compile("error"))
+        pg.unroute(API)
+        pg.evaluate("dispatchEvent(new Event('online'))")
+        expect(fila.locator(".num")).not_to_have_text("…", timeout=30000)
+        print("v23: 402 in_flight se reintenta solo ok")
+
     # push de recordatorio (solo Chrome: entrega el push por DevTools y revisa la notificación)
     if MOTOR == "chrome":
         ctx.grant_permissions(["notifications"], origin=URL.rstrip("/"))
@@ -357,6 +376,6 @@ with sync_playwright() as p:
     nav.close()
 
 print("export:", lineas)
-errores = [e for e in errores if "status of 400" not in e and "status of 401" not in e]  # la foto mala la rechaza OpenRouter: esperado
+errores = [e for e in errores if not any(f"status of {c}" in e for c in (400, 401, 402))]  # foto mala, clave mala y 402 simulado: esperados
 assert not errores, errores
 print("e2e: ok")

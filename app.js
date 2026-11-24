@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '22';
+const VERSION = '23';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -251,7 +251,12 @@ async function estimar(it) {
     throw { nota: 'sin conexión' };
   }
   // 4xx = no sirve reintentar solo (clave, saldo, pedido): queda en rojo hasta que la persona toque Reintentar.
-  if (r.status === 402) throw { nota: 'sin saldo en OpenRouter', final: true };
+  if (r.status === 402) {
+    // «in_flight»: hay saldo, pero no para varias a la vez; se reintenta sola. Lo demás es saldo agotado.
+    const j = await r.json().catch(() => ({}));
+    if (/in_flight/.test(j.error?.metadata?.reason || '')) throw { nota: 'reintentando' };
+    throw { nota: 'sin saldo en OpenRouter', final: true };
+  }
   if (r.status === 401 || r.status === 403) throw { nota: 'clave inválida', final: true };
   if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) throw { nota: `error ${r.status}`, final: true };
   if (!r.ok) throw { nota: 'reintentando' };

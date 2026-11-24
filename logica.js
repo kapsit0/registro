@@ -45,6 +45,8 @@ export function cuerpoEstimacion({ texto, imagen, anterior, correccion }) {
     messages: [{ role: 'user', content: partes }],
     response_format: { type: 'json_schema', json_schema: { name: 'comida', strict: true, schema: ESQUEMA } },
     reasoning: { effort: 'low' },
+    // OpenRouter reserva saldo por el máximo de salida: sin tope, con poco saldo rechaza (402 in_flight). Una foto usa ~300.
+    max_tokens: 4096,
   };
 }
 

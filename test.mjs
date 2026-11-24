@@ -117,6 +117,7 @@ assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre
 }
 const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', correccion: 'eran 2' });
 assert.equal(cuerpo.messages[0].content.length, 3);
+assert.equal(cuerpo.max_tokens, 4096); // sin tope, con poco saldo OpenRouter rechaza por reserva (402 in_flight)
 console.log('logica.js: ok');
 
 { // recordatorio.js (script clásico del service worker)
