@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '15';
+const VERSION = '16';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -99,6 +99,7 @@ function renderComida() {
   const ok = del.filter((i) => i.estado === 'ok');
   const pend = del.length - ok.length;
   $('#c-dia').textContent = L.etiquetaDia(d, new Date());
+  $('#c-texto').placeholder = `¿Qué comiste${diaOff === 0 ? '' : diaOff === -1 ? ' ayer' : ' el ' + L.diaCorto(d)}?`; // lo escrito va a ese día
   $('#c-sig').disabled = diaOff >= 0;
   // franja lun–dom de la semana que se mira: punto = ese día tiene comidas
   const ini = L.inicioSemana(d);
@@ -173,7 +174,9 @@ function renderGasto() {
   $('#g-quedan').classList.toggle('negativo', quedan < 0);
   $('#g-barra').classList.toggle('negativo', quedan < 0);
   $('#g-barra i').style.width = Math.max(0, cfg.presupuesto ? (100 * quedan) / cfg.presupuesto : 0) + '%'; // se vacía al gastar
-  $('#g-de').textContent = `quedan de ${L.pesos(cfg.presupuesto)}` + (semOff === 0 ? '' : ` · gastado ${L.pesos(gastado)}`);
+  const diasQuedan = 7 - ((new Date().getDay() + 6) % 7); // hoy incluido: lunes 7 … domingo 1
+  $('#g-de').textContent = `quedan de ${L.pesos(cfg.presupuesto)}` +
+    (semOff !== 0 ? ` · gastado ${L.pesos(gastado)}` : quedan > 0 && diasQuedan > 1 ? ` · ${L.pesos(quedan / diasQuedan)}/día` : '');
   $('#g-cats').innerHTML = cfg.categorias.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   const porCat = new Map();
   for (const i of sem) porCat.set(i.cat, (porCat.get(i.cat) || 0) + i.monto);
@@ -325,9 +328,14 @@ document.addEventListener('touchend', (e) => {
   const dy = t.clientY - toque.y;
   toque = null;
   if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+  const antes = diaOff + semOff;
   if (tab === 'comida') diaOff = Math.min(0, diaOff + (dx > 0 ? -1 : 1));
   else semOff = Math.min(0, semOff + (dx > 0 ? -1 : 1));
+  if (diaOff + semOff === antes) return; // ya en hoy: nada que mover
   render();
+  // el contenido entra desde el lado hacia donde se deslizó, para que se note el cambio de día
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+    $('#' + tab).animate([{ transform: `translateX(${dx > 0 ? -28 : 28}px)`, opacity: 0.3 }, { transform: 'none', opacity: 1 }], { duration: 180, easing: 'ease-out' });
 });
 
 $('#c-form').addEventListener('submit', async (e) => {

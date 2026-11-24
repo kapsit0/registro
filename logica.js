@@ -84,7 +84,9 @@ export function conOFF(est, off) {
   const p = off && off.status === 1 && off.product;
   const n = p && p.nutriments;
   if (!n || est.alimentos.length !== 1 || !(parseFloat(n['energy-kcal_100g']) >= 0)) return null; // NaN si falta, '' o null
-  const gramos = Math.round(Number(p.serving_quantity) || Number(p.product_quantity) || est.alimentos[0].gramos || 100);
+  // porción de la etiqueta; sin ella, el envase si es de una porción (lata, barra); un envase grande (arroz 1 kg) no se come entero
+  const envase = Number(p.product_quantity) || 0;
+  const gramos = Math.round(Number(p.serving_quantity) || (envase && envase <= 600 ? envase : est.alimentos[0].gramos || 100));
   const k = (x) => Math.max(0, Math.round(((Number(n[x]) || 0) * gramos) / 100));
   const nombre = String(p.product_name_es || p.product_name || '').trim().slice(0, 40) || est.alimentos[0].nombre;
   const alimentos = [{ nombre, gramos, kcal: k('energy-kcal_100g'), p: k('proteins_100g'), c: k('carbohydrates_100g'), g: k('fat_100g'), q: 1 }];

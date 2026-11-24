@@ -73,6 +73,9 @@ with sync_playwright() as p:
     expect(pg.locator("#g-quedan")).to_have_text("$ 25.500")
     pg.fill("#g-monto", "2000"); pg.click("[data-cat='Hogar']")
     expect(pg.locator("#g-quedan")).to_have_text("$ 23.500")
+    dias = 7 - datetime.now().weekday()  # v16: cuánto queda por día (hoy incluido)
+    if dias > 1:
+        expect(pg.locator("#g-de")).to_contain_text("$ " + f"{round(23500 / dias):,}".replace(",", ".") + "/día")
     pg.screenshot(path=OUT / "gasto-claro.png")
 
     # offline: recarga desde la caché, anota igual, estima al volver
@@ -248,6 +251,7 @@ with sync_playwright() as p:
 
     # v15: repetir en otro día lo dice; al volver a la app tras >5 min, vuelve a Hoy
     pg.click("[data-dia='-1']"); expect(pg.locator("#c-dia")).to_have_text("Ayer")
+    expect(pg.locator("#c-texto")).to_have_attribute("placeholder", "¿Qué comiste ayer?")  # v16
     pg.locator("#c-recientes button").first.click()
     expect(pg.locator("#aviso")).to_contain_text("· ayer")
     pg.click("#aviso button")
@@ -256,6 +260,7 @@ with sync_playwright() as p:
       Date.now = () => real() + 6 * 60e3; oculta(false); document.dispatchEvent(new Event('visibilitychange'));
       Date.now = real; delete document.hidden; }""")
     expect(pg.locator("#c-dia")).to_have_text("Hoy")
+    expect(pg.locator("#c-texto")).to_have_attribute("placeholder", "¿Qué comiste?")
     # abrir un registro o Ajustes no enfoca un campo (en el iPhone abría el teclado encima de las porciones)
     pg.locator("#c-lista li[data-id]").first.click()
     assert pg.evaluate("document.activeElement.tagName") == "FORM"

@@ -79,6 +79,8 @@ assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre
   assert.equal(r.kcal, 154);
   const sin = (cambio) => L.conOFF(leer('7801610001196'), { ...coca, product: { ...coca.product, ...cambio } });
   assert.equal(sin({ serving_quantity: undefined, product_quantity: '160' }).alimentos[0].gramos, 160); // sin porción: el envase
+  assert.equal(sin({ serving_quantity: undefined, product_quantity: 1000 }).alimentos[0].gramos, 500); // envase grande: lo que vio la IA
+  assert.equal(sin({ serving_quantity: '', product_quantity: '' }).alimentos[0].gramos, 500);
   assert.equal(sin({ nutriments: {} }), null); // sin kcal: queda la IA
   assert.equal(sin({ nutriments: { 'energy-kcal_100g': '' } }), null);
   assert.equal(sin({ product_name: '' }).nombre, 'agua');
