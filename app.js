@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '1';
+const VERSION = '2';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -41,13 +41,16 @@ let tab = localStorage.getItem('tab') || 'comida';
 let diaOff = 0;
 let semOff = 0;
 
-function aviso(txt) {
+function aviso(txt, ms = 2200) {
   const a = $('#aviso');
   a.textContent = txt;
   a.classList.add('ver');
   clearTimeout(aviso.t);
-  aviso.t = setTimeout(() => a.classList.remove('ver'), 2200);
+  aviso.t = setTimeout(() => a.classList.remove('ver'), ms);
 }
+// errores inesperados a la vista (en el iPhone no hay consola)
+addEventListener('error', (e) => aviso('Error: ' + e.message, 8000));
+addEventListener('unhandledrejection', (e) => aviso('Error: ' + (e.reason?.message || e.reason), 8000));
 
 function render() {
   for (const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', b.dataset.tab === tab);
@@ -125,15 +128,19 @@ const aDataURL = (blob) => new Promise((ok, mal) => {
 async function achicar(archivo) {
   const url = URL.createObjectURL(archivo);
   try {
-    const img = new Image();
-    img.src = url;
-    await img.decode();
+    // onload en vez de img.decode(): decode() falla con fotos grandes en algunos Safari
+    const img = await new Promise((ok, mal) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => mal(new Error('no se pudo abrir la imagen'));
+      i.src = url;
+    });
     const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement('canvas');
     c.width = Math.round(img.naturalWidth * k);
     c.height = Math.round(img.naturalHeight * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.75));
+    return await new Promise((ok, mal) => c.toBlob((b) => (b ? ok(b) : mal(new Error('no se pudo achicar'))), 'image/jpeg', 0.75));
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -175,6 +182,7 @@ async function procesarCola() {
       const it = items.find((i) => i.tipo === 'comida' && i.estado === 'pendiente' && !vistos.has(i));
       if (!it) break;
       vistos.add(it);
+      if (!it.foto && !it.texto && !it.correccion) { Object.assign(it, { estado: 'error', nota: 'sin foto ni texto' }); await guardar(it); continue; }
       if (!cfg.clave) { it.nota = 'falta la clave (ajustes)'; continue; }
       if (!navigator.onLine) { it.nota = 'sin conexión'; continue; }
       it.nota = 'estimando';
@@ -224,11 +232,21 @@ $('#c-form').addEventListener('submit', async (e) => {
 
 $('#c-foto').addEventListener('change', async (e) => {
   const archivo = e.target.files[0];
-  e.target.value = '';
   if (!archivo) return;
-  let foto;
-  try { foto = await achicar(archivo); } catch { aviso('No se pudo leer la foto'); return; }
-  await guardar({ id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), foto, estado: 'pendiente', nota: 'estimando' });
+  // la fila aparece al tiro; 'preparando' no lo toma la cola hasta tener la foto
+  const it = { id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), estado: 'preparando', nota: 'preparando foto' };
+  await guardar(it);
+  render();
+  try {
+    it.foto = await achicar(archivo);
+  } catch (err) {
+    it.foto = archivo; // sin achicar: Gemini acepta la original (incluso HEIC), solo pesa más
+    it.nota = 'foto original (' + err.message + ')';
+  }
+  e.target.value = ''; // recién ahora: en Safari limpiar antes puede invalidar el archivo de la cámara
+  if (!items.includes(it)) return;
+  Object.assign(it, { estado: 'pendiente', nota: 'estimando' });
+  await guardar(it);
   render();
   procesarCola();
 });
@@ -373,6 +391,10 @@ setInterval(() => { if (items.some((i) => i.estado === 'pendiente')) procesarCol
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
-try { items = await tx('readonly', (s) => s.getAll()); } catch (e) { aviso('No se pudieron leer los datos: ' + e.message); }
+try { items = await tx('readonly', (s) => s.getAll()); } catch (e) { aviso('No se pudieron leer los datos: ' + e.message, 8000); }
+for (const it of items.filter((i) => i.estado === 'preparando')) { // la app se cerró a mitad de una foto
+  Object.assign(it, { estado: 'error', nota: 'la foto no alcanzó a guardarse' });
+  guardar(it);
+}
 render();
 procesarCola();
