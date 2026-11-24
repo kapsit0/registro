@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '2';
+const VERSION = '3';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -336,7 +336,11 @@ $('#abrir-ajustes').addEventListener('click', () => {
 $('#ajustes').addEventListener('close', () => {
   const f = $('#ajustes form');
   const cats = f.categorias.value.split(',').map((s) => s.trim()).filter(Boolean);
-  cfg = { presupuesto: L.leerMonto(f.presupuesto.value), categorias: cats.length ? cats : CFG_DEF.categorias, clave: f.clave.value.trim() };
+  const pegada = f.clave.value.trim();
+  const clave = (pegada.match(/sk-or-[\w-]+/) || [pegada])[0]; // por si se pegó con texto alrededor
+  if (clave !== cfg.clave) // clave nueva: reintentar solas las que fallaron por clave
+    for (const it of items.filter((i) => i.estado === 'error' && i.nota === 'clave inválida')) { it.estado = 'pendiente'; guardar(it); }
+  cfg = { presupuesto: L.leerMonto(f.presupuesto.value), categorias: cats.length ? cats : CFG_DEF.categorias, clave };
   guardarCfg();
   render();
   procesarCola();
