@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '18';
+const VERSION = '19';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -342,6 +342,8 @@ $('#c-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const texto = $('#c-texto').value.trim();
   if (!texto) return;
+  const igual = L.yaAnotado(items, texto);
+  if (igual) return repetir(igual.id); // ya se anotó tal cual: mismas cifras, al tiro y sin internet
   $('#c-texto').value = '';
   await guardar({ id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), texto, estado: 'pendiente', nota: 'estimando' });
   render();

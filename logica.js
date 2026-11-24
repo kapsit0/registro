@@ -147,6 +147,15 @@ export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida', bus
     .slice(0, n).map((r) => r.ult);
 }
 
+// Lo escrito ya se anotó antes (mismo nombre o mismo texto): la última versión, para repetirla sin IA.
+export function yaAnotado(items, texto) {
+  const q = normal(texto);
+  let ult = null;
+  for (const i of items)
+    if (i.tipo === 'comida' && i.estado === 'ok' && (normal(i.nombre) === q || normal(i.texto) === q) && (!ult || i.t > ult.t)) ult = i;
+  return q ? ult : null;
+}
+
 // Para la corrección: lo que se estimó, con las cantidades que dejó la persona.
 export function describir(it) {
   const pr = it.porcion || 1;

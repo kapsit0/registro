@@ -57,6 +57,12 @@ assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', 
   lista.push({ tipo: 'comida', estado: 'ok', nombre: 'Café con leche', t: new Date(2026, 10, 21, 8).toISOString() });
   assert.deepEqual(L.recientes(lista, new Date(2026, 10, 23, 9)).map((i) => i.nombre), ['Café con leche', 'pan con palta ', 'Yogurt', 'Plátano', 'Pastel']);
   assert.equal(L.recientes(lista, new Date(2026, 10, 23, 13))[0].nombre, 'pan con palta ');
+  // escribir algo ya anotado: la última versión (por nombre o por lo escrito), sin tildes ni mayúsculas
+  assert.equal(L.yaAnotado(lista, 'PAN CON PALTA').t, new Date(2026, 10, 22, 13).toISOString());
+  assert.equal(L.yaAnotado(lista, '1 Banana Grande ').nombre, 'Plátano');
+  assert.equal(L.yaAnotado(lista, 'pan con palta y huevo'), null); // parecido no basta: eso lo estima la IA
+  assert.equal(L.yaAnotado(lista, 'foto'), null); // las fallidas no
+  assert.equal(L.yaAnotado([{ tipo: 'comida', estado: 'ok', nombre: 'Pan' }], '   '), null);
   const g = (monto, cat, detalle, dia) => ({ tipo: 'gasto', monto, cat, detalle, t: new Date(2026, 10, dia, 13).toISOString() });
   const gs = [g(4500, 'Comida', 'almuerzo', 20), g(4500, 'Comida', 'Almuerzo ', 21), g(20000, 'Combustible', '', 21), g(4500, 'Super', 'almuerzo', 22)];
   assert.deepEqual(L.recientes(gs, new Date(2026, 10, 23), 8, 'gasto').map((i) => `${i.cat} ${i.monto}`),
