@@ -58,7 +58,17 @@ input, select {
 input:focus, select:focus { border-color: var(--acento); }
 .boton { height: 48px; border-radius: 12px; border: 0; background: var(--acento); color: var(--sobre-acento); font-weight: 600; padding: 0 16px; display: grid; place-items: center; flex: none; }
 .boton svg { width: 24px; height: 24px; }
-#c-camara { width: 56px; }
+#c-camara, #c-galeria { width: 52px; }
+.boton.secundario { background: var(--tarjeta); color: var(--acento); border: 1px solid var(--linea); }
+.recientes { display: flex; gap: 8px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px; scrollbar-width: none; }
+.recientes::-webkit-scrollbar { display: none; }
+.recientes button {
+  flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--linea);
+  background: var(--tarjeta); font-size: 15px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recientes button small { color: var(--suave); margin-left: 4px; font-size: 13px; }
+#c-barra { margin-top: 8px; }
+#c-barra.negativo i { background: var(--peligro); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chips button { height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--linea); background: var(--tarjeta); font-weight: 600; font-size: 15px; }
 .chips.listo button { border-color: var(--acento); color: var(--acento); }
@@ -76,6 +86,7 @@ input:focus, select:focus { border-color: var(--acento); }
 dialog {
   border: 0; border-radius: 18px; padding: 18px 16px 16px; background: var(--tarjeta); color: var(--tinta);
   width: calc(100% - 16px); max-width: 520px; margin: calc(env(safe-area-inset-top) + 12px) auto auto; box-shadow: 0 4px 24px #0003;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 24px); overflow-y: auto; overscroll-behavior: contain;
 }
 dialog::backdrop { background: #0006; }
 dialog form { display: grid; gap: 12px; }
@@ -111,6 +122,8 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
   opacity: 0; transition: .2s; pointer-events: none; white-space: nowrap;
 }
 #aviso.ver { opacity: 1; transform: translate(-50%, 0); }
+#aviso.ver.con-accion { pointer-events: auto; }
+#aviso button { margin-left: 14px; border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px 0; }
 </style>
 </head>
 <body>
@@ -127,14 +140,20 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 <section id="comida" hidden>
   <nav class="fecha"><button data-dia="-1" aria-label="Día anterior">‹</button><span id="c-dia"></span><button data-dia="1" id="c-sig" aria-label="Día siguiente">›</button></nav>
   <div class="cifra"><span id="c-kcal">0</span> <small>kcal</small></div>
+  <div class="barra" id="c-barra" hidden><i></i></div>
   <div class="sub" id="c-macros"></div>
   <form id="c-form" class="fila" autocomplete="off">
     <input id="c-texto" placeholder="¿Qué comiste?" enterkeyhint="send" aria-label="Qué comiste">
-    <label class="boton" id="c-camara" aria-label="Foto">
+    <label class="boton" id="c-camara" aria-label="Cámara">
       <input id="c-foto" type="file" accept="image/*" capture="environment" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
     </label>
+    <label class="boton secundario" id="c-galeria" aria-label="Elegir foto">
+      <input id="c-foto-galeria" type="file" accept="image/*" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3 2.5-2.5L19 17"/></svg>
+    </label>
   </form>
+  <div id="c-recientes" class="recientes" aria-label="Repetir"></div>
   <ul id="c-lista" class="lista"></ul>
 </section>
 
@@ -156,6 +175,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 <dialog id="ajustes">
   <form method="dialog">
     <label>Presupuesto semanal<input name="presupuesto" inputmode="numeric"></label>
+    <label>Meta diaria (kcal)<input name="meta" inputmode="numeric" placeholder="sin meta"></label>
     <label>Categorías<input name="categorias" autocapitalize="words"></label>
     <label>Clave OpenRouter<input name="clave" type="password" autocomplete="off" spellcheck="false"></label>
     <div class="acciones">

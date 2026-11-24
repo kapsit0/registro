@@ -87,6 +87,22 @@ export function fraccion(x) {
   return Number.isInteger(x) ? String(x) : String(x).replace('.', ',');
 }
 
+// Comidas para repetir con un toque: las más frecuentes de los últimos 30 días (por nombre), la última versión de cada una.
+export function recientes(items, ahora = new Date(), n = 8) {
+  const desde = new Date(ahora - 30 * 864e5).toISOString();
+  const m = new Map();
+  for (const i of items) {
+    if (i.tipo !== 'comida' || i.estado !== 'ok' || i.t < desde) continue;
+    const k = String(i.nombre || '').trim().toLowerCase();
+    if (!k) continue;
+    const r = m.get(k) || { veces: 0, ult: i };
+    r.veces++;
+    if (i.t > r.ult.t) r.ult = i;
+    m.set(k, r);
+  }
+  return [...m.values()].sort((a, b) => b.veces - a.veces || (a.ult.t < b.ult.t ? 1 : -1)).slice(0, n).map((r) => r.ult);
+}
+
 // Para la corrección: lo que se estimó, con las cantidades que dejó la persona.
 export function describir(it) {
   const pr = it.porcion || 1;

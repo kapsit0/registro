@@ -1,11 +1,11 @@
 import * as L from './logica.js';
 
-const VERSION = '5';
+const VERSION = '6';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // ---------- configuración (por dispositivo) ----------
-const CFG_DEF = { presupuesto: 30000, categorias: ['Comida', 'Combustible', 'Super', 'Misc'], clave: '' };
+const CFG_DEF = { presupuesto: 30000, meta: 0, categorias: ['Comida', 'Combustible', 'Super', 'Misc'], clave: '' };
 let cfg = { ...CFG_DEF };
 try { cfg = { ...CFG_DEF, ...JSON.parse(localStorage.getItem('cfg') || '{}') }; } catch {}
 const guardarCfg = () => localStorage.setItem('cfg', JSON.stringify(cfg));
@@ -42,9 +42,17 @@ let tab = localStorage.getItem('tab') || 'comida';
 let diaOff = 0;
 let semOff = 0;
 
-function aviso(txt, ms = 2200) {
+// accion = ['Deshacer', fn]: el aviso muestra un botón mientras se ve
+function aviso(txt, ms = 2200, accion) {
   const a = $('#aviso');
   a.textContent = txt;
+  if (accion) {
+    const b = document.createElement('button');
+    b.textContent = accion[0];
+    b.onclick = () => { a.classList.remove('ver'); accion[1](); };
+    a.append(b);
+  }
+  a.classList.toggle('con-accion', !!accion);
   a.classList.add('ver');
   clearTimeout(aviso.t);
   aviso.t = setTimeout(() => a.classList.remove('ver'), ms);
@@ -76,10 +84,21 @@ function renderComida() {
   const pend = del.length - ok.length;
   $('#c-dia').textContent = L.etiquetaDia(d, new Date());
   $('#c-sig').disabled = diaOff >= 0;
-  $('#c-kcal').textContent = L.miles(L.sumar(ok, 'kcal'));
-  $('#c-macros').textContent = ok.length || pend
-    ? `P ${L.sumar(ok, 'p')} · C ${L.sumar(ok, 'c')} · G ${L.sumar(ok, 'g')}` + (pend ? ` · ${pend} sin estimar` : '')
-    : '';
+  const kcal = L.sumar(ok, 'kcal');
+  $('#c-kcal').textContent = L.miles(kcal);
+  $('#c-barra').hidden = !cfg.meta;
+  if (cfg.meta) {
+    $('#c-barra i').style.width = Math.min(100, (100 * kcal) / cfg.meta) + '%';
+    $('#c-barra').classList.toggle('negativo', kcal > cfg.meta);
+  }
+  const resto = cfg.meta ? (kcal <= cfg.meta ? `quedan ${L.miles(cfg.meta - kcal)}` : `${L.miles(kcal - cfg.meta)} sobre la meta`) : '';
+  $('#c-macros').textContent = [
+    ok.length ? `P ${L.sumar(ok, 'p')} · C ${L.sumar(ok, 'c')} · G ${L.sumar(ok, 'g')}` : '',
+    resto,
+    pend ? `${pend} sin estimar` : '',
+  ].filter(Boolean).join(' · ');
+  $('#c-recientes').innerHTML = L.recientes(items)
+    .map((i) => `<button type="button" data-rep="${i.id}">${esc(i.nombre)}<small>${L.miles(i.kcal)}</small></button>`).join('');
   $('#c-lista').innerHTML = del.length
     ? del.map((i) => {
         const porc = i.porcion && i.porcion !== 1 ? ` · ${L.fraccion(i.porcion)} porción` : '';
@@ -224,6 +243,7 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.dia) { diaOff = Math.min(0, diaOff + Number(b.dataset.dia)); render(); }
   else if (b.dataset.sem) { semOff = Math.min(0, semOff + Number(b.dataset.sem)); render(); }
   else if (b.dataset.cat) anotarGasto(b.dataset.cat);
+  else if (b.dataset.rep) repetir(b.dataset.rep);
   else if (b.dataset.id) abrirEditar(b.dataset.id);
 });
 
@@ -237,7 +257,19 @@ $('#c-form').addEventListener('submit', async (e) => {
   procesarCola();
 });
 
-$('#c-foto').addEventListener('change', async (e) => {
+// Repetir una comida reciente: copia sus alimentos y porción, sin IA (funciona sin internet).
+async function repetir(id) {
+  const o = items.find((i) => i.id === id);
+  if (!o) return;
+  const it = { id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), estado: 'ok', nota: '', nombre: o.nombre,
+    alimentos: structuredClone(L.alimentosDe(o)), porcion: o.porcion || 1 };
+  Object.assign(it, L.totales(it));
+  await guardar(it);
+  render();
+  aviso(`${it.nombre} · ${L.miles(it.kcal)} kcal`, 4000, ['Deshacer', async () => { await borrar(it); render(); }]);
+}
+
+async function fotoElegida(e) {
   const archivo = e.target.files[0];
   if (!archivo) return;
   // la fila aparece al tiro; 'preparando' no lo toma la cola hasta tener la foto
@@ -257,7 +289,9 @@ $('#c-foto').addEventListener('change', async (e) => {
   await guardar(it);
   render();
   procesarCola();
-});
+}
+$('#c-foto').addEventListener('change', fotoElegida);
+$('#c-foto-galeria').addEventListener('change', fotoElegida);
 
 $('#g-monto').addEventListener('input', (e) => {
   const n = L.leerMonto(e.target.value);
@@ -268,13 +302,14 @@ $('#g-monto').addEventListener('input', (e) => {
 async function anotarGasto(cat) {
   const monto = L.leerMonto($('#g-monto').value);
   if (!monto) { $('#g-monto').focus(); return; }
-  await guardar({ id: crypto.randomUUID(), tipo: 'gasto', t: new Date().toISOString(), monto, cat, detalle: $('#g-detalle').value.trim() });
+  const g = { id: crypto.randomUUID(), tipo: 'gasto', t: new Date().toISOString(), monto, cat, detalle: $('#g-detalle').value.trim() };
+  await guardar(g);
   $('#g-monto').value = '';
   $('#g-detalle').value = '';
   document.activeElement.blur();
   semOff = 0;
   render();
-  aviso(`${L.pesos(monto)} · ${cat}`);
+  aviso(`${L.pesos(monto)} · ${cat}`, 4000, ['Deshacer', async () => { await borrar(g); render(); }]);
 }
 
 // ---------- editar ----------
@@ -288,6 +323,8 @@ function abrirEditar(id) {
   // borrador de porciones: se aplica solo al tocar Guardar
   const b = { alimentos: structuredClone(L.alimentosDe(it)), porcion: it.porcion || 1 };
   let manual = false; // escribió kcal/P/C/G a mano: esos números mandan
+  const dt = new Date(it.t);
+  const campoHora = `<label>Fecha y hora<input type="datetime-local" name="t" value="${L.diaClave(dt)}T${L.hora(dt)}"></label>`;
   f.innerHTML = it.tipo === 'comida'
     ? `<label>Comida<input name="nombre" value="${esc(it.nombre || it.texto || '')}"></label>
        ${listo ? `<div class="porcion"><span>Porción</span><div class="mini">${[0.25, 0.5, 0.75, 1, 1.5, 2]
@@ -299,6 +336,7 @@ function abrirEditar(id) {
          <label>C<input name="c" inputmode="numeric" value="${it.c ?? ''}"></label>
          <label>G<input name="g" inputmode="numeric" value="${it.g ?? ''}"></label>
        </div>
+       ${campoHora}
        <label>Corrección<input name="correccion" placeholder="ej. era otra cosa" autocomplete="off"></label>
        <div class="acciones"><button value="borrar" class="peligro">Borrar</button>
          <button value="corregir">${it.estado === 'ok' ? 'Corregir' : 'Reintentar'}</button>
@@ -306,14 +344,18 @@ function abrirEditar(id) {
     : `<label>Monto<input name="monto" inputmode="numeric" value="${L.miles(it.monto)}"></label>
        <label>Categoría<select name="cat">${cats.map((c) => `<option${c === it.cat ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
        <label>Detalle<input name="detalle" value="${esc(it.detalle || '')}" autocomplete="off"></label>
+       ${campoHora}
        <div class="acciones"><button value="borrar" class="peligro">Borrar</button>
          <button value="guardar" class="primario">Guardar</button></div>`;
   dlg.onclose = async () => {
     const v = Object.fromEntries(new FormData(f));
     const accion = dlg.returnValue;
     dlg.returnValue = '';
-    if (accion === 'borrar') await borrar(it);
-    else if (accion === 'guardar' && it.tipo === 'gasto') {
+    if (accion === 'guardar' && v.t && !isNaN(new Date(v.t))) it.t = new Date(v.t).toISOString(); // datetime-local = hora local
+    if (accion === 'borrar') {
+      await borrar(it);
+      aviso('Borrado', 5000, ['Deshacer', async () => { await guardar(it); render(); }]);
+    } else if (accion === 'guardar' && it.tipo === 'gasto') {
       it.monto = L.leerMonto(v.monto) || it.monto;
       it.cat = v.cat;
       it.detalle = v.detalle.trim();
@@ -372,6 +414,7 @@ function abrirEditar(id) {
 $('#abrir-ajustes').addEventListener('click', () => {
   const f = $('#ajustes form');
   f.presupuesto.value = L.miles(cfg.presupuesto);
+  f.meta.value = cfg.meta ? L.miles(cfg.meta) : '';
   f.categorias.value = cfg.categorias.join(', ');
   f.clave.value = cfg.clave;
   $('#version').textContent = `v${VERSION} · ${items.length} registros`;
@@ -384,7 +427,7 @@ $('#ajustes').addEventListener('close', () => {
   const clave = (pegada.match(/sk-or-[\w-]+/) || [pegada])[0]; // por si se pegó con texto alrededor
   if (clave !== cfg.clave) // clave nueva: reintentar solas las que fallaron por clave
     for (const it of items.filter((i) => i.estado === 'error' && i.nota === 'clave inválida')) { it.estado = 'pendiente'; guardar(it); }
-  cfg = { presupuesto: L.leerMonto(f.presupuesto.value), categorias: cats.length ? cats : CFG_DEF.categorias, clave };
+  cfg = { presupuesto: L.leerMonto(f.presupuesto.value), meta: L.leerMonto(f.meta.value), categorias: cats.length ? cats : CFG_DEF.categorias, clave };
   guardarCfg();
   render();
   procesarCola();

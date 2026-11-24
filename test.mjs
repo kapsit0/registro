@@ -36,6 +36,14 @@ assert.equal(L.paso(0, -1), 0);
 assert.equal(L.paso(4, 1), 4);
 assert.equal(L.paso(1.2, 1), 1.5); // fuera de la lista: al siguiente
 assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', '½', '1', '1½', '2¾', '1,2']);
+{
+  const c = (nombre, dia, estado = 'ok') => ({ tipo: 'comida', estado, nombre, t: new Date(2026, 10, dia, 13).toISOString() });
+  const lista = [c('Pan con palta', 20), c('pan con palta ', 22), c('Yogurt', 23), c('Pastel', 1), c('Foto', 23, 'error'),
+    { tipo: 'gasto', t: new Date(2026, 10, 23).toISOString() }];
+  const r = L.recientes(lista, new Date(2026, 10, 23, 20));
+  assert.deepEqual(r.map((i) => i.nombre), ['pan con palta ', 'Yogurt', 'Pastel']); // más veces primero, la última versión
+  assert.equal(L.recientes(lista, new Date(2026, 11, 25)).length, 0); // más de 30 días
+}
 assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre":"x","alimentos":[]}' } }] }));
 const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', correccion: 'eran 2' });
 assert.equal(cuerpo.messages[0].content.length, 3);
