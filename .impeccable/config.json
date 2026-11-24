@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-24T01:14:45.079Z",
+        "reason": "Claude: only hit is .seg, an iOS-style segmented control; 2px track inset is intentional, labels centered in ~170px buttons (checked in 390px screenshots)"
+      }
+    ]
+  }
+}
