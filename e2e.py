@@ -1,4 +1,4 @@
-# Prueba de punta a punta (Playwright + Pillow): MOTOR=chrome|webkit python e2e.py <carpeta app> <carpeta capturas>
+# Prueba de punta a punta: MOTOR=chrome|webkit uv run --with playwright --with pillow --with python-barcode python e2e.py <carpeta app> <carpeta capturas>
 """Prueba de punta a punta de Registro en Chrome (390 px): gasto, comida texto y foto con IA real, offline, edición, export."""
 from datetime import datetime, timedelta
 import re
@@ -23,6 +23,14 @@ im = Image.new("RGB", (1600, 1200), "#c8102e"); d = ImageDraw.Draw(im)
 f = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 150)
 d.text((120, 400), "Coca-Cola", fill="white", font=f); d.text((120, 620), "lata 350 ml", fill="white", font=f)
 im.save(foto, quality=90)
+
+# foto de un código de barras solo (Coca-Cola lata Chile): sin OFF, la IA inventaba el producto
+import barcode, io
+from barcode.writer import ImageWriter
+buf = io.BytesIO(); barcode.get("ean13", "780161000119", writer=ImageWriter()).write(buf)
+barras = OUT / "barras.jpg"
+lienzo = Image.new("RGB", (1400, 1000), "#d9d2c3"); lienzo.paste(Image.open(buf).convert("RGB"), (300, 380))
+lienzo.rotate(6, fillcolor="#d9d2c3").save(barras, quality=80)
 
 errores = []
 with sync_playwright() as p:
@@ -237,6 +245,13 @@ with sync_playwright() as p:
         deslizar(330, 60); expect(pg.locator("#c-dia")).to_have_text("Hoy")
         deslizar(330, 60); expect(pg.locator("#c-dia")).to_have_text("Hoy")  # no pasa de hoy
     print("v13: buscar, Intro y deslizar ok")
+
+    # v14: código de barras → Open Food Facts (154 kcal la lata de 350 ml)
+    pg.set_input_files("#c-foto", str(barras))
+    fila = pg.locator("#c-lista li[data-id]").last  # la más nueva (la lata de la primera foto también dice Coca)
+    expect(fila.locator(".num")).to_have_text("154", timeout=40000)
+    expect(fila).to_contain_text("Coca-Cola")
+    print("v14: código de barras →", fila.inner_text().replace("\n", " | "))
 
     # push de recordatorio (solo Chrome: entrega el push por DevTools y revisa la notificación)
     if MOTOR == "chrome":

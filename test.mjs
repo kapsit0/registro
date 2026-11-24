@@ -59,6 +59,28 @@ assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', 
     ['Comida 4500', 'Super 4500', 'Combustible 20000']);
 }
 assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre":"x","alimentos":[]}' } }] }));
+{ // código de barras → Open Food Facts
+  assert.ok(L.eanValido('7801610001196') && L.eanValido('7802800533343') && L.eanValido('96385074') && L.eanValido('036000291452'));
+  assert.ok(!L.eanValido('7801610001195') && !L.eanValido('780161000119') && !L.eanValido('') && !L.eanValido('abc'));
+  const leer = (codigo) => L.leerEstimacion({ choices: [{ message: { content: JSON.stringify({ nombre: 'Agua mineral', codigo,
+    alimentos: [{ nombre: 'agua', gramos: 500, kcal: 0, proteina: 0, carbohidratos: 0, grasa: 0 }] }) } }] });
+  assert.equal(leer('7 801610 001196').codigo, '7801610001196'); // espacios como vienen impresos
+  assert.equal(leer('7801610001195').codigo, undefined); // dígito mal leído: se descarta
+  // respuesta real de OFF (24-11-2026), recortada
+  const coca = { status: 1, product: { product_name: 'Coca-Cola', product_quantity: 350, serving_quantity: 350,
+    nutriments: { 'energy-kcal_100g': 44, proteins_100g: 0, carbohydrates_100g: 11, fat_100g: 0 } } };
+  const r = L.conOFF(leer('7801610001196'), coca);
+  assert.equal(r.nombre, 'Coca-Cola');
+  assert.deepEqual(r.alimentos, [{ nombre: 'Coca-Cola', gramos: 350, kcal: 154, p: 0, c: 39, g: 0, q: 1 }]);
+  assert.equal(r.kcal, 154);
+  const sin = (cambio) => L.conOFF(leer('7801610001196'), { ...coca, product: { ...coca.product, ...cambio } });
+  assert.equal(sin({ serving_quantity: undefined, product_quantity: '160' }).alimentos[0].gramos, 160); // sin porción: el envase
+  assert.equal(sin({ nutriments: {} }), null); // sin kcal: queda la IA
+  assert.equal(sin({ nutriments: { 'energy-kcal_100g': '' } }), null);
+  assert.equal(sin({ product_name: '' }).nombre, 'agua');
+  assert.equal(L.conOFF(leer('7801610001196'), { status: 0 }), null); // no está en OFF
+  assert.equal(L.conOFF(est, coca), null); // la IA vio un plato con varios alimentos: no se reemplaza
+}
 const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', correccion: 'eran 2' });
 assert.equal(cuerpo.messages[0].content.length, 3);
 console.log('logica.js: ok');

@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '13';
+const VERSION = '14';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -242,10 +242,18 @@ async function estimar(it) {
   if (r.status === 401 || r.status === 403) throw { nota: 'clave inválida', final: true };
   if (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429) throw { nota: `error ${r.status}`, final: true };
   if (!r.ok) throw { nota: 'reintentando' };
+  let est;
   try {
-    return L.leerEstimacion(await r.json());
+    est = L.leerEstimacion(await r.json());
   } catch {
     throw { nota: 'respuesta inválida', final: true };
+  }
+  if (!est.codigo) return est;
+  try { // si Open Food Facts no responde o no tiene el producto, queda lo de la IA
+    const off = await fetch(L.urlOFF(est.codigo), { signal: AbortSignal.timeout(8000) });
+    return (off.ok && L.conOFF(est, await off.json())) || est;
+  } catch {
+    return est;
   }
 }
 

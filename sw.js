@@ -1,5 +1,5 @@
 // Offline: responde desde la caché y actualiza en segundo plano. Recordatorios: push desde GitHub Actions.
-const CACHE = 'registro-13'; // subirlo en cada versión: así la app avisa «Versión nueva»
+const CACHE = 'registro-14'; // subirlo en cada versión: así la app avisa «Versión nueva»
 const ARCHIVOS = ['./', 'index.html', 'app.js', 'logica.js', 'recordatorio.js', 'manifest.webmanifest', 'icono-180.png', 'icono-512.png'];
 importScripts('recordatorio.js');
 

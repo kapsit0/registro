@@ -10,7 +10,8 @@ export const PROMPT =
   'estima la porción que se ve. nombre: el plato completo, máximo 4 palabras en español. ' +
   'alimentos: cada alimento por separado (un producto envasado o un plato indivisible = 1 alimento), ' +
   'con su nombre corto, gramos (o ml) estimados, y kcal y gramos de proteína, carbohidratos y grasa ' +
-  'para esa cantidad. Cifras enteras.';
+  'para esa cantidad. Cifras enteras. codigo: si se ve un código de barras, sus dígitos tal como están ' +
+  'impresos bajo las barras; si no se ve o no se leen todos, texto vacío.';
 
 const ALIMENTO = {
   type: 'object',
@@ -26,8 +27,8 @@ const ALIMENTO = {
 };
 const ESQUEMA = {
   type: 'object',
-  properties: { nombre: { type: 'string' }, alimentos: { type: 'array', items: ALIMENTO } },
-  required: ['nombre', 'alimentos'],
+  properties: { nombre: { type: 'string' }, codigo: { type: 'string' }, alimentos: { type: 'array', items: ALIMENTO } },
+  required: ['nombre', 'codigo', 'alimentos'],
 };
 
 export function cuerpoEstimacion({ texto, imagen, anterior, correccion }) {
@@ -62,7 +63,33 @@ export function leerEstimacion(respuesta) {
   }));
   if (!alimentos.length) throw new Error('sin alimentos');
   const est = { nombre: String(j.nombre || alimentos[0].nombre || 'Comida').slice(0, 60), alimentos, porcion: 1 };
+  const codigo = String(j.codigo || '').replace(/\D/g, '');
+  if (eanValido(codigo)) est.codigo = codigo;
   return { ...est, ...totales(est) };
+}
+
+// EAN-8, UPC-A (12) o EAN-13 con su dígito verificador: descarta dígitos mal leídos por la IA.
+export function eanValido(s) {
+  if (!/^(\d{8}|\d{12}|\d{13})$/.test(s)) return false;
+  const d = [...s].map(Number).reverse(); // desde el verificador: pesos 1,3,1,3… hacia la izquierda
+  return d.reduce((t, x, i) => t + x * (i % 2 ? 3 : 1), 0) % 10 === 0;
+}
+
+export const urlOFF = (codigo) =>
+  `https://world.openfoodfacts.org/api/v2/product/${codigo}?fields=product_name,product_name_es,serving_quantity,product_quantity,nutriments`;
+
+// Producto envasado con código: Open Food Facts manda (por 100 g × 1 porción de la etiqueta), no lo que adivinó la IA.
+// null = no sirve (no está, sin kcal, o la IA vio más de un alimento) → queda la estimación de la IA.
+export function conOFF(est, off) {
+  const p = off && off.status === 1 && off.product;
+  const n = p && p.nutriments;
+  if (!n || est.alimentos.length !== 1 || !(parseFloat(n['energy-kcal_100g']) >= 0)) return null; // NaN si falta, '' o null
+  const gramos = Math.round(Number(p.serving_quantity) || Number(p.product_quantity) || est.alimentos[0].gramos || 100);
+  const k = (x) => Math.max(0, Math.round(((Number(n[x]) || 0) * gramos) / 100));
+  const nombre = String(p.product_name_es || p.product_name || '').trim().slice(0, 40) || est.alimentos[0].nombre;
+  const alimentos = [{ nombre, gramos, kcal: k('energy-kcal_100g'), p: k('proteins_100g'), c: k('carbohydrates_100g'), g: k('fat_100g'), q: 1 }];
+  const r = { ...est, nombre: nombre.slice(0, 60), alimentos, porcion: 1 };
+  return { ...r, ...totales(r) };
 }
 
 // Totales = Σ alimento × su cantidad, × porción del plato. Se guardan en el ítem para sumar sin recalcular.
