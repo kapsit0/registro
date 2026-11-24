@@ -1,0 +1,31 @@
+# Recordatorio a las 13:45 y 20:45 de Chile. Crons de verano (UTC−3) e invierno (UTC−4):
+# enviar_recordatorio.py descarta el que no corresponde. Secretos: PUSH_SUB y VAPID_PRIVADA.
+name: Recordatorio
+on:
+  schedule:
+    - cron: '45 16 * * *'
+    - cron: '45 17 * * *'
+    - cron: '45 23 * * *'
+    - cron: '45 0 * * *'
+  workflow_dispatch:
+    inputs:
+      tipo:
+        description: 'almuerzo o cena (prueba manual)'
+        default: almuerzo
+permissions:
+  contents: read
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pywebpush==2.5.0
+      - run: python enviar_recordatorio.py
+        env:
+          CRON: ${{ github.event.schedule }}
+          TIPO: ${{ inputs.tipo }}
+          PUSH_SUB: ${{ secrets.PUSH_SUB }}
+          VAPID_PRIVADA: ${{ secrets.VAPID_PRIVADA }}

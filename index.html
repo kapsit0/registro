@@ -127,6 +127,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 .acciones { display: flex; gap: 8px; margin-top: 4px; }
 .acciones button { flex: 1; height: 48px; border-radius: 12px; border: 1px solid var(--linea); background: none; font-weight: 600; }
 .acciones .falso-boton { flex: 1; display: grid; place-items: center; height: 48px; border: 1px solid var(--linea); border-radius: 12px; font-weight: 600; font-size: 17px; color: var(--tinta); }
+#push-sub { width: 100%; font: 12px/1.3 ui-monospace, Menlo, monospace; border: 1px solid var(--linea); border-radius: 12px; padding: 10px; background: var(--fondo); color: var(--tinta); -webkit-user-select: all; user-select: all; }
 .acciones .primario { background: var(--acento); color: var(--sobre-acento); border: 0; }
 .acciones .peligro { color: var(--peligro); }
 .pie { text-align: center; color: var(--suave); font-size: 12px; }
@@ -200,6 +201,8 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
       <button type="button" id="guardar-icloud" aria-label="Guardar gastos para el Excel y respaldo">Guardar en iCloud</button>
       <label class="falso-boton"><input id="restaurar" type="file" accept=".txt,.json,text/plain,application/json" hidden>Restaurar</label>
     </div>
+    <div class="acciones"><button type="button" id="recordatorios">Recordatorios 13:45 y 20:45</button></div>
+    <textarea id="push-sub" readonly hidden rows="3" aria-label="Código de recordatorios"></textarea>
     <div class="acciones"><button value="ok" class="primario">Listo</button></div>
     <div class="pie" id="version"></div>
     <div class="pie" id="saldo"></div>

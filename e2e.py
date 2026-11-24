@@ -211,6 +211,21 @@ with sync_playwright() as p:
     pg.screenshot(path=OUT / "v7-comida.png")
     print("v7: semana, hoy y gasto frecuente ok")
 
+    # push de recordatorio (solo Chrome: entrega el push por DevTools y revisa la notificación)
+    if MOTOR == "chrome":
+        ctx.grant_permissions(["notifications"], origin=URL.rstrip("/"))
+        cdp = ctx.new_cdp_session(pg)
+        regs = []
+        cdp.on("ServiceWorker.workerRegistrationUpdated", lambda e: regs.extend(e["registrations"]))
+        cdp.send("ServiceWorker.enable")
+        pg.wait_for_timeout(800)
+        reg_id = next(r["registrationId"] for r in regs if r["scopeURL"].startswith(URL) and not r["isDeleted"])
+        cdp.send("ServiceWorker.deliverPushMessage", {"origin": URL.rstrip("/"), "registrationId": reg_id, "data": json.dumps({"tipo": "cena"})})
+        pg.wait_for_timeout(2000)
+        notis = pg.evaluate("navigator.serviceWorker.ready.then(r => r.getNotifications()).then(ns => ns.map(n => [n.title, n.body]))")
+        assert notis and "kcal" in notis[-1][0] + notis[-1][1] and "esta semana" in notis[-1][1], notis
+        print("push:", notis[-1])
+
     # modo oscuro
     pg.emulate_media(color_scheme="dark")
     pg.screenshot(path=OUT / "comida-oscuro.png")

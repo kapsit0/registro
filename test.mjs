@@ -55,6 +55,29 @@ const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', cor
 assert.equal(cuerpo.messages[0].content.length, 3);
 console.log('logica.js: ok');
 
+{ // recordatorio.js (script clásico del service worker)
+  const vm = await import('node:vm');
+  const { readFileSync } = await import('node:fs');
+  const ctx = { self: {} };
+  vm.runInNewContext(readFileSync(new URL('./recordatorio.js', import.meta.url), 'utf8'), ctx);
+  const R = ctx.self.textoRecordatorio;
+  const a = (h, kcal, dia = 24) => ({ tipo: 'comida', estado: 'ok', kcal, t: new Date(2026, 10, dia, h).toISOString() });
+  const g = (monto, dia) => ({ tipo: 'gasto', monto, t: new Date(2026, 10, dia, 12).toISOString() });
+  const ahora13 = new Date(2026, 10, 24, 13, 45); // martes
+  const ahora20 = new Date(2026, 10, 24, 20, 45);
+  const sinNada = R('almuerzo', [], {}, ahora13);
+  assert.equal(sinNada.titulo, '¿Qué almorzaste?');
+  assert.equal(sinNada.cuerpo, 'Hoy no has anotado nada.');
+  assert.deepEqual({ ...R('almuerzo', [a(8, 400)], {}, ahora13) }, { titulo: '¿Qué almorzaste?', cuerpo: 'Vas en 400 kcal hoy.' });
+  assert.deepEqual({ ...R('almuerzo', [a(8, 400), a(13, 800)], { meta: 2000 }, ahora13) }, { titulo: 'Hoy vas en 1.200 kcal', cuerpo: 'Quedan 800.' });
+  assert.equal(R('almuerzo', [a(13, 800, 23)], {}, ahora13).cuerpo, 'Hoy no has anotado nada.'); // ayer no cuenta
+  // noche: gastos desde el lunes 23 (el domingo 22 no cuenta)
+  const noche = R('cena', [a(13, 800), g(5000, 22), g(4500, 23), g(2000, 24)], { presupuesto: 30000 }, ahora20);
+  assert.deepEqual({ ...noche }, { titulo: '¿Qué comiste en la tarde?', cuerpo: 'Vas en 800 kcal hoy. Quedan $ 23.500 esta semana.' });
+  assert.equal(R('cena', [a(19, 500), g(40000, 24)], { presupuesto: 30000, meta: 400 }, ahora20).cuerpo, '100 sobre la meta. Te pasaste $ 10.000 esta semana.');
+  console.log('recordatorio.js: ok');
+}
+
 if (process.argv[2] === 'vivo') {
   const { readFileSync } = await import('node:fs');
   const clave = readFileSync(`${process.env.HOME}/.config/comida/clave_openrouter`, 'utf8').trim();

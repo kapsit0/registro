@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '11';
+const VERSION = '12';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -8,15 +8,26 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const CFG_DEF = { presupuesto: 30000, meta: 0, categorias: ['Comida', 'Combustible', 'Super', 'Misc'], clave: '' };
 let cfg = { ...CFG_DEF };
 try { cfg = { ...CFG_DEF, ...JSON.parse(localStorage.getItem('cfg') || '{}') }; } catch {}
-const guardarCfg = () => localStorage.setItem('cfg', JSON.stringify(cfg));
+const guardarCfg = () => { localStorage.setItem('cfg', JSON.stringify(cfg)); espejoAjustes(); };
 
 // ---------- datos: IndexedDB, todo queda en el teléfono ----------
 const base = new Promise((ok, mal) => {
-  const r = indexedDB.open('registro', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
-  r.onsuccess = () => ok(r.result);
+  const r = indexedDB.open('registro', 2); // v2: + 'ajustes' (copia para el service worker, que no lee localStorage)
+  r.onupgradeneeded = () => {
+    const db = r.result;
+    if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'id' });
+    if (!db.objectStoreNames.contains('ajustes')) db.createObjectStore('ajustes');
+  };
+  r.onsuccess = () => {
+    r.result.onversionchange = () => r.result.close();
+    ok(r.result);
+  };
   r.onerror = () => mal(r.error);
 });
+// meta y presupuesto para el texto del recordatorio (sw.js); la clave no hace falta allá
+async function espejoAjustes() {
+  try { (await base).transaction('ajustes', 'readwrite').objectStore('ajustes').put({ presupuesto: cfg.presupuesto, meta: cfg.meta }, 'cfg'); } catch {}
+}
 async function tx(modo, f) {
   const db = await base;
   return new Promise((ok, mal) => {
@@ -550,7 +561,29 @@ $('#restaurar').addEventListener('change', async (e) => {
   aviso(`${n} restaurados`);
 });
 
+// ---------- recordatorios (push enviado por GitHub Actions a las 13:45 y 20:45) ----------
+const VAPID = 'BE-d3Q5RdRNtI9LWObjRyObO2f_TXkd3g-SfoQbv3JC9VoE25Ga_DmniNE6l4_Gb_aKOy3QyxN0HlOkuKmiNrak'; // pública
+const aBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+$('#recordatorios').addEventListener('click', async () => {
+  try {
+    if (!('PushManager' in window) || !('Notification' in window)) throw new Error('ábrela desde el ícono de inicio');
+    if ((await Notification.requestPermission()) !== 'granted') throw new Error('sin permiso para notificaciones');
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription())
+      || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: aBytes(VAPID) }));
+    const codigo = JSON.stringify(sub); // se guarda como secreto PUSH_SUB en GitHub (una vez por teléfono)
+    const ta = $('#push-sub');
+    ta.value = codigo;
+    ta.hidden = false;
+    ta.select();
+    try { await navigator.clipboard.writeText(codigo); aviso('Código copiado', 4000); } catch { aviso('Copia el código de abajo', 4000); }
+  } catch (e) {
+    aviso('Recordatorios: ' + motivo(e), 8000);
+  }
+});
+
 // ---------- inicio ----------
+espejoAjustes();
 addEventListener('online', procesarCola);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;

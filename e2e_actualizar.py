@@ -24,6 +24,7 @@ with sync_playwright() as p:
     expect(pg.locator("#aviso")).not_to_contain_text("Versión nueva")
     sw = copia / "sw.js"  # «publicar» otra versión
     sw.write_text(sw.read_text().replace("registro-", "registro-x"))
+    os.utime(sw, (os.path.getmtime(sw) + 10,) * 2)  # http.server compara la fecha por segundos: si cae en el mismo, responde 304
     pg.evaluate("navigator.serviceWorker.getRegistration().then(r => r.update())")
     expect(pg.locator("#aviso")).to_contain_text("Versión nueva lista", timeout=15000)
     with pg.expect_navigation():
