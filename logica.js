@@ -199,3 +199,38 @@ export function lineaExcel(g) {
   const limpio = (s) => String(s || '').replace(/[;\s]+/g, ' ').trim();
   return `${diaClave(d)} ${hora(d)}:${pad(d.getSeconds())};${g.monto};${limpio(g.cat)};${limpio(g.detalle)}`;
 }
+
+// Hora en que se sacó la foto (EXIF DateTimeOriginal, o DateTime) de un JPEG; null si no la trae.
+export function horaExif(buf) {
+  try {
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xffd8) return null;
+    for (let o = 2; o + 10 <= v.byteLength; ) {
+      const marca = v.getUint16(o);
+      if (marca === 0xffe1 && v.getUint32(o + 4) === 0x45786966) return fechaTiff(v, o + 10); // APP1 'Exif'
+      if ((marca & 0xff00) !== 0xff00 || marca === 0xffda) return null; // empezó la imagen: no hay EXIF
+      o += 2 + v.getUint16(o + 2);
+    }
+  } catch {} // archivo cortado o raro: sin hora
+  return null;
+}
+function fechaTiff(v, t) {
+  const le = v.getUint16(t) === 0x4949; // 'II' = little endian; el iPhone usa 'MM'
+  const u16 = (p) => v.getUint16(t + p, le);
+  const u32 = (p) => v.getUint32(t + p, le);
+  const entrada = (ifd, tag) => {
+    for (let i = 0, n = u16(ifd); i < n; i++) if (u16(ifd + 2 + i * 12) === tag) return ifd + 2 + i * 12;
+    return -1;
+  };
+  const ifd0 = u32(4);
+  const pExif = entrada(ifd0, 0x8769);
+  for (const [ifd, tag] of [[pExif >= 0 ? u32(pExif + 8) : -1, 0x9003], [ifd0, 0x0132]]) {
+    if (ifd < 0) continue;
+    const e = entrada(ifd, tag);
+    if (e < 0) continue;
+    const txt = String.fromCharCode(...new Uint8Array(v.buffer, v.byteOffset + t + u32(e + 8), 19));
+    const m = txt.match(/^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)$/);
+    if (m) return new Date(m[1], m[2] - 1, m[3], m[4], m[5], m[6]);
+  }
+  return null;
+}

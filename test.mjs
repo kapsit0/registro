@@ -87,6 +87,28 @@ assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre
   assert.equal(L.conOFF(leer('7801610001196'), { status: 0 }), null); // no está en OFF
   assert.equal(L.conOFF(est, coca), null); // la IA vio un plato con varios alimentos: no se reemplaza
 }
+{ // hora de la foto (EXIF): JPEG mínimo con APP1 Exif armado a mano, 'MM' (iPhone) e 'II'
+  const jpeg = ({ le = false, original = '2026:11:23 13:20:05', dt = '2026:11:20 08:00:00' } = {}) => {
+    const b = [];
+    const w16 = (x) => (le ? b.push(x & 255, x >> 8) : b.push(x >> 8, x & 255));
+    const w32 = (x) => (le ? b.push(x & 255, (x >> 8) & 255, (x >> 16) & 255, x >>> 24) : b.push(x >>> 24, (x >> 16) & 255, (x >> 8) & 255, x & 255));
+    const asc = (s) => b.push(...[...s].map((c) => c.charCodeAt(0)), 0);
+    // cabecera(8) · IFD0 en 8: 2 entradas → 38 · IFD Exif en 38: 1 entrada → 56 · textos en 56 y 76
+    b.push(...(le ? [0x49, 0x49] : [0x4d, 0x4d])); w16(42); w32(8);
+    w16(2); w16(0x0132); w16(2); w32(20); w32(56); w16(0x8769); w16(4); w32(1); w32(38); w32(0);
+    w16(1); w16(0x9003); w16(2); w32(20); w32(76); w32(0);
+    asc(dt); asc(original);
+    const app1 = [0xff, 0xe1, ((b.length + 8) >> 8) & 255, (b.length + 8) & 255, 0x45, 0x78, 0x69, 0x66, 0, 0, ...b];
+    return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, ...app1, 0xff, 0xda, 0, 2]).buffer;
+  };
+  const f = (d) => d && `${L.diaClave(d)} ${L.hora(d)}:${L.pad(d.getSeconds())}`;
+  assert.equal(f(L.horaExif(jpeg())), '2026-11-23 13:20:05');
+  assert.equal(f(L.horaExif(jpeg({ le: true }))), '2026-11-23 13:20:05');
+  assert.equal(f(L.horaExif(jpeg({ original: 'x'.repeat(19) }))), '2026-11-20 08:00:00'); // sin original: DateTime
+  assert.equal(L.horaExif(new Uint8Array([0xff, 0xd8, 0xff, 0xda, 0, 2]).buffer), null); // sin EXIF
+  assert.equal(L.horaExif(new Uint8Array([1, 2, 3]).buffer), null); // no es JPEG
+  assert.equal(L.horaExif(jpeg().slice(0, 40)), null); // cortado
+}
 const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', correccion: 'eran 2' });
 assert.equal(cuerpo.messages[0].content.length, 3);
 console.log('logica.js: ok');

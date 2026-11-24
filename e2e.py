@@ -277,6 +277,33 @@ with sync_playwright() as p:
     expect(fila).to_contain_text("Coca-Cola")
     print("v14: código de barras →", fila.inner_text().replace("\n", " | "))
 
+    # v17: varias fotos de la galería, cada una a la hora en que se sacó (EXIF de hoy o ayer); sin internet = sin IA
+    def foto_exif(nombre, cuando, color):
+        ex = Image.Exif(); ex.get_ifd(0x8769)[0x9003] = cuando.strftime("%Y:%m:%d %H:%M:%S")
+        ruta = OUT / nombre; Image.new("RGB", (900, 700), color).save(ruta, exif=ex); return str(ruta)
+    ayer = datetime.now() - timedelta(days=1)
+    dos = [foto_exif("exif1.jpg", ayer.replace(hour=13, minute=10), "#c9a36b"), foto_exif("exif2.jpg", ayer.replace(hour=8, minute=5), "#8fb36b")]
+    vieja = foto_exif("vieja.jpg", datetime.now() - timedelta(days=5), "#6b8fb3")  # más vieja que ayer: se anota hoy
+    ctx.set_offline(True)
+    pg.click("[data-dia='-1']"); n_ayer = pg.locator("#c-lista li[data-id]").count()
+    pg.click("#c-dia"); n_hoy = pg.locator("#c-lista li[data-id]").count()
+    pg.set_input_files("#c-foto-galeria", dos)
+    expect(pg.locator("#c-dia")).to_have_text("Ayer")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n_ayer + 2)
+    for hh in ["13:10", "08:05"]:
+        f = pg.locator("#c-lista li[data-id]", has_text=hh)
+        expect(f).to_contain_text("sin conexión")
+        f.click(); pg.click("#editar button[value=borrar]")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n_ayer)
+    pg.click("#c-dia")
+    pg.set_input_files("#c-foto-galeria", vieja)
+    expect(pg.locator("#c-dia")).to_have_text("Hoy")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n_hoy + 1)
+    pg.locator("#c-lista li[data-id]").last.click(); pg.click("#editar button[value=borrar]")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n_hoy)
+    ctx.set_offline(False)
+    print("v17: fotos de la galería a su hora ok")
+
     # push de recordatorio (solo Chrome: entrega el push por DevTools y revisa la notificación)
     if MOTOR == "chrome":
         ctx.grant_permissions(["notifications"], origin=URL.rstrip("/"))

@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '16';
+const VERSION = '17';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -373,11 +373,36 @@ async function repetirGasto(id) {
   aviso(`${L.pesos(g.monto)} · ${g.cat}`, 4000, ['Deshacer', async () => { await borrar(g); render(); }]);
 }
 
+// Galería: varias fotos a la vez, cada una a la hora en que se sacó (para anotar el día completo en la noche).
 async function fotoElegida(e) {
-  const archivo = e.target.files[0];
-  if (!archivo) return;
+  const galeria = e.target.id === 'c-foto-galeria';
+  const fotos = [];
+  for (const archivo of e.target.files) fotos.push([archivo, galeria ? await horaDeFoto(archivo) : null]);
+  const nueva = fotos.map((f) => f[1]).filter(Boolean).sort((a, b) => b - a)[0];
+  if (nueva) { // mostrar el día de la foto más nueva
+    const dia = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    diaOff = Math.min(0, Math.round((dia(nueva) - dia(new Date())) / 864e5));
+  }
+  for (const [archivo, h] of fotos) await unaFoto(archivo, h ? h.toISOString() : nuevaHora());
+  e.target.value = ''; // recién ahora: en Safari limpiar antes puede invalidar el archivo de la cámara
+}
+
+// Hora EXIF solo si es de hoy o ayer: una foto más vieja (una etiqueta de la semana pasada) se anota como siempre.
+async function horaDeFoto(archivo) {
+  try {
+    const h = L.horaExif(await archivo.slice(0, 1 << 17).arrayBuffer());
+    const ayer = new Date();
+    ayer.setHours(0, 0, 0, 0);
+    ayer.setDate(ayer.getDate() - 1);
+    return h && h >= ayer && h <= Date.now() + 6e4 ? h : null;
+  } catch {
+    return null;
+  }
+}
+
+async function unaFoto(archivo, t) {
   // la fila aparece al tiro; 'preparando' no lo toma la cola hasta tener la foto
-  const it = { id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), estado: 'preparando', nota: 'preparando foto' };
+  const it = { id: crypto.randomUUID(), tipo: 'comida', t, estado: 'preparando', nota: 'preparando foto' };
   await guardar(it);
   render();
   try {
@@ -387,7 +412,6 @@ async function fotoElegida(e) {
     catch (err2) { Object.assign(it, { estado: 'error', nota: 'no se pudo leer la foto: ' + motivo(err2) }); await guardar(it); render(); return; }
     it.nota = 'foto original (' + err.message + ')';
   }
-  e.target.value = ''; // recién ahora: en Safari limpiar antes puede invalidar el archivo de la cámara
   if (!items.includes(it)) return;
   Object.assign(it, { estado: 'pendiente', nota: 'estimando' });
   await guardar(it);
