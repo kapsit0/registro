@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '3';
+const VERSION = '4';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -80,7 +80,8 @@ function renderComida() {
     : '';
   $('#c-lista').innerHTML = del.length
     ? del.map((i) => {
-        const sub = i.estado === 'ok' ? `P${i.p} C${i.c} G${i.g}` : i.nota || 'estimando';
+        const porc = i.porcion && i.porcion !== 1 ? ` · ${L.fraccion(i.porcion)} porción` : '';
+        const sub = i.estado === 'ok' ? `P${i.p} C${i.c} G${i.g}${porc}` : i.nota || 'estimando';
         const clase = i.estado === 'ok' ? '' : i.estado === 'error' ? 'error' : 'pendiente';
         return `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>` +
           `<span class="txt"><b>${esc(i.nombre || i.texto || 'Foto')}</b><small>${esc(sub)}</small></span>` +
@@ -148,7 +149,7 @@ async function achicar(archivo) {
 
 async function estimar(it) {
   const imagen = it.foto ? await aDataURL(it.foto) : null;
-  const anterior = it.kcal != null ? `${it.nombre} · ${it.kcal} kcal · P${it.p} C${it.c} G${it.g} (${it.detalle || ''})` : '';
+  const anterior = it.kcal != null ? L.describir(it) : '';
   let r;
   try {
     r = await fetch(L.URL_API, {
@@ -191,6 +192,7 @@ async function procesarCola() {
         Object.assign(it, await estimar(it), { estado: 'ok', nota: '' });
         delete it.foto; // la foto solo sirve para estimar; corregir usa la estimación anterior
         delete it.correccion;
+        delete it.detalle; // formato antiguo: ahora va en alimentos
       } catch (e) {
         it.nota = e.nota || 'sin conexión';
         if (e.final) it.estado = 'error';
@@ -276,16 +278,22 @@ function abrirEditar(id) {
   const dlg = $('#editar');
   const f = dlg.querySelector('form');
   const cats = [...new Set([...cfg.categorias, it.cat].filter(Boolean))];
+  const listo = it.tipo === 'comida' && it.estado === 'ok';
+  // borrador de porciones: se aplica solo al tocar Guardar
+  const b = { alimentos: structuredClone(L.alimentosDe(it)), porcion: it.porcion || 1 };
+  let manual = false; // escribió kcal/P/C/G a mano: esos números mandan
   f.innerHTML = it.tipo === 'comida'
     ? `<label>Comida<input name="nombre" value="${esc(it.nombre || it.texto || '')}"></label>
+       ${listo ? `<div class="porcion"><span>Porción</span><div class="mini">${[0.25, 0.5, 0.75, 1, 1.5, 2]
+         .map((x) => `<button type="button" data-porc="${x}">${L.fraccion(x)}</button>`).join('')}</div></div>
+       <ul class="alimentos"></ul>` : ''}
        <div class="grid4">
          <label>kcal<input name="kcal" inputmode="numeric" value="${it.kcal ?? ''}"></label>
          <label>P<input name="p" inputmode="numeric" value="${it.p ?? ''}"></label>
          <label>C<input name="c" inputmode="numeric" value="${it.c ?? ''}"></label>
          <label>G<input name="g" inputmode="numeric" value="${it.g ?? ''}"></label>
        </div>
-       ${it.detalle ? `<div class="detalle">${esc(it.detalle)}</div>` : ''}
-       <label>Corrección<input name="correccion" placeholder="ej. era media porción" autocomplete="off"></label>
+       <label>Corrección<input name="correccion" placeholder="ej. era otra cosa" autocomplete="off"></label>
        <div class="acciones"><button value="borrar" class="peligro">Borrar</button>
          <button value="corregir">${it.estado === 'ok' ? 'Corregir' : 'Reintentar'}</button>
          <button value="guardar" class="primario">Guardar</button></div>`
@@ -306,9 +314,14 @@ function abrirEditar(id) {
       await guardar(it);
     } else if (accion === 'guardar') {
       it.nombre = v.nombre.trim() || it.nombre;
-      if (v.kcal !== '') {
-        Object.assign(it, { kcal: L.leerMonto(v.kcal), p: L.leerMonto(v.p), c: L.leerMonto(v.c), g: L.leerMonto(v.g), estado: 'ok', nota: '' });
+      if (manual && v.kcal !== '') {
+        const n = L.leerMonto;
+        Object.assign(it, { alimentos: [{ nombre: it.nombre, gramos: 0, kcal: n(v.kcal), p: n(v.p), c: n(v.c), g: n(v.g), q: 1 }], porcion: 1 });
+      } else if (listo) Object.assign(it, b);
+      if (it.alimentos) {
+        Object.assign(it, L.totales(it), { estado: 'ok', nota: '' });
         delete it.foto;
+        delete it.detalle;
       }
       await guardar(it);
     } else if (accion === 'corregir') {
@@ -321,6 +334,31 @@ function abrirEditar(id) {
     }
     render();
   };
+  if (it.tipo === 'comida') {
+    const campo = (k) => f.elements.namedItem(k);
+    const pintar = () => {
+      const t = L.totales(b);
+      if (!manual) for (const k of ['kcal', 'p', 'c', 'g']) campo(k).value = t[k];
+      f.querySelectorAll('[data-porc]').forEach((x) => x.classList.toggle('sel', Number(x.dataset.porc) === b.porcion));
+      f.querySelector('.alimentos').innerHTML = b.alimentos.map((a, i) => {
+        const k = b.porcion * a.q;
+        return `<li><span class="txt"><b>${esc(a.nombre)}</b><small>${a.gramos ? Math.round(a.gramos * k) + ' g · ' : ''}${Math.round(a.kcal * k)} kcal</small></span>` +
+          (b.alimentos.length > 1 ? `<span class="paso"><button type="button" data-al="${i}" data-d="-1" aria-label="Menos ${esc(a.nombre)}">−</button>` +
+            `<b>${L.fraccion(a.q)}</b><button type="button" data-al="${i}" data-d="1" aria-label="Más ${esc(a.nombre)}">+</button></span>` : '') +
+          '</li>';
+      }).join('');
+    };
+    f.onclick = (e) => {
+      const x = e.target.closest('[data-porc], [data-al]');
+      if (!x) return;
+      if (x.dataset.porc) b.porcion = Number(x.dataset.porc);
+      else { const a = b.alimentos[x.dataset.al]; a.q = L.paso(a.q, Number(x.dataset.d)); }
+      manual = false;
+      pintar();
+    };
+    f.querySelector('.grid4').oninput = () => { manual = true; };
+    if (listo) pintar();
+  } else f.onclick = null;
   dlg.showModal();
 }
 

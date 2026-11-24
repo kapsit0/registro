@@ -83,7 +83,22 @@ dialog label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
 dialog label input, dialog label select { color: var(--tinta); font-size: 17px; width: 100%; min-width: 0; }
 .grid4 { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 8px; }
 .grid4 input { padding: 0 10px; }
-.detalle { color: var(--suave); font-size: 13px; margin: -4px 2px 0; }
+.porcion { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--suave); }
+.mini { display: flex; gap: 4px; }
+.mini button, .paso button {
+  min-width: 38px; height: 38px; padding: 0 8px; border-radius: 19px; border: 1px solid var(--linea);
+  background: none; color: var(--tinta); font-weight: 600; font-size: 16px;
+}
+.mini button.sel { background: var(--acento); border-color: var(--acento); color: var(--sobre-acento); }
+.alimentos { list-style: none; margin: -4px 0 0; padding: 0; }
+.alimentos li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--linea); }
+.alimentos .txt { flex: 1; min-width: 0; }
+.alimentos .txt b, .alimentos .txt small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alimentos .txt b { font-weight: 500; font-size: 16px; }
+.alimentos .txt small { color: var(--suave); font-size: 13px; }
+.paso { display: flex; align-items: center; gap: 2px; }
+.paso button { font-size: 20px; padding: 0; width: 38px; }
+.paso b { min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; }
 .acciones { display: flex; gap: 8px; margin-top: 4px; }
 .acciones button { flex: 1; height: 48px; border-radius: 12px; border: 1px solid var(--linea); background: none; font-weight: 600; }
 .acciones .falso-boton { flex: 1; display: grid; place-items: center; height: 48px; border: 1px solid var(--linea); border-radius: 12px; font-weight: 600; font-size: 17px; color: var(--tinta); }

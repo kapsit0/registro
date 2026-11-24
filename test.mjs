@@ -18,8 +18,25 @@ assert.equal(L.leerMonto(''), 0);
 assert.equal(L.lineaExcel({ t: new Date(2026, 10, 5, 9, 5, 59).toISOString(), monto: 1700, cat: 'Comida', detalle: 'pan; queso\n' }),
   '2026-11-05 09:05:59;1700;Comida;pan queso');
 assert.equal(L.sumar([{ kcal: 650 }, { kcal: '325' }, {}], 'kcal'), 975);
-const est = L.leerEstimacion({ choices: [{ message: { content: '```json\n{"nombre":"Pan","kcal":250.4,"proteina":8,"carbohidratos":48,"grasa":-1,"detalle":"1 marraqueta"}\n```' } }] });
-assert.deepEqual(est, { nombre: 'Pan', kcal: 250, p: 8, c: 48, g: 0, detalle: '1 marraqueta' });
+const est = L.leerEstimacion({ choices: [{ message: { content: '```json\n{"nombre":"Arroz con pollo","alimentos":[' +
+  '{"nombre":"arroz","gramos":150,"kcal":195.4,"proteina":4,"carbohidratos":42,"grasa":-1},' +
+  '{"nombre":"pollo","gramos":120,"kcal":198,"proteina":37,"carbohidratos":0,"grasa":4}]}\n```' } }] });
+assert.equal(est.nombre, 'Arroz con pollo');
+assert.deepEqual(est.alimentos[0], { nombre: 'arroz', gramos: 150, kcal: 195, p: 4, c: 42, g: 0, q: 1 });
+assert.deepEqual(L.totales(est), { kcal: 393, p: 41, c: 42, g: 4 });
+assert.equal(est.kcal, 393);
+est.alimentos[0].q = 0.5; // media porción de arroz
+assert.deepEqual(L.totales(est), { kcal: 296, p: 39, c: 21, g: 4 });
+assert.deepEqual(L.totales({ ...est, porcion: 0.5 }), { kcal: 148, p: 20, c: 11, g: 2 });
+assert.equal(L.describir({ ...est, ...L.totales(est) }), 'Arroz con pollo · 296 kcal (arroz 75 g, pollo 120 g)');
+assert.deepEqual(L.alimentosDe({ nombre: 'Pan', kcal: 250, p: 8, c: 48, g: 1 }), [{ nombre: 'Pan', gramos: 0, kcal: 250, p: 8, c: 48, g: 1, q: 1 }]);
+assert.equal(L.paso(1, -1), 0.75);
+assert.equal(L.paso(1, 1), 1.5);
+assert.equal(L.paso(0, -1), 0);
+assert.equal(L.paso(4, 1), 4);
+assert.equal(L.paso(1.2, 1), 1.5); // fuera de la lista: al siguiente
+assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', '½', '1', '1½', '2¾', '1,2']);
+assert.throws(() => L.leerEstimacion({ choices: [{ message: { content: '{"nombre":"x","alimentos":[]}' } }] }));
 const cuerpo = L.cuerpoEstimacion({ texto: 'x', anterior: 'Pan · 250 kcal', correccion: 'eran 2' });
 assert.equal(cuerpo.messages[0].content.length, 3);
 console.log('logica.js: ok');
@@ -36,5 +53,6 @@ if (process.argv[2] === 'vivo') {
   assert.equal(r.status, 200, await r.clone().text());
   const e = L.leerEstimacion(await r.json());
   assert.ok(e.kcal > 200 && e.kcal < 1500, JSON.stringify(e));
+  assert.ok(e.alimentos.length >= 2, 'debería separar pan y palta: ' + JSON.stringify(e.alimentos));
   console.log('vivo:', e, `${Date.now() - t0} ms`);
 }

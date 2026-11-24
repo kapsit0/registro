@@ -7,21 +7,27 @@ export const PROMPT =
   'Registro de calorías (Chile). Recibes la foto de un plato, de un envase o de su tabla nutricional, ' +
   'los datos de un producto escaneado, o un texto. Con tabla nutricional o datos del producto, usa esos ' +
   'valores para la cantidad indicada (sin cantidad: 1 porción). Con un plato, reconoce cada alimento y ' +
-  'estima la porción que se ve. Cifras enteras: kcal y gramos de proteína, carbohidratos y grasa. ' +
-  'nombre: máximo 4 palabras en español. detalle: una línea con lo que asumiste, ' +
-  "ej. 'arroz 150 g · pollo 120 g'.";
+  'estima la porción que se ve. nombre: el plato completo, máximo 4 palabras en español. ' +
+  'alimentos: cada alimento por separado (un producto envasado o un plato indivisible = 1 alimento), ' +
+  'con su nombre corto, gramos (o ml) estimados, y kcal y gramos de proteína, carbohidratos y grasa ' +
+  'para esa cantidad. Cifras enteras.';
 
-const ESQUEMA = {
+const ALIMENTO = {
   type: 'object',
   properties: {
     nombre: { type: 'string' },
+    gramos: { type: 'integer' },
     kcal: { type: 'integer' },
     proteina: { type: 'integer' },
     carbohidratos: { type: 'integer' },
     grasa: { type: 'integer' },
-    detalle: { type: 'string' },
   },
-  required: ['nombre', 'kcal', 'proteina', 'carbohidratos', 'grasa', 'detalle'],
+  required: ['nombre', 'gramos', 'kcal', 'proteina', 'carbohidratos', 'grasa'],
+};
+const ESQUEMA = {
+  type: 'object',
+  properties: { nombre: { type: 'string' }, alimentos: { type: 'array', items: ALIMENTO } },
+  required: ['nombre', 'alimentos'],
 };
 
 export function cuerpoEstimacion({ texto, imagen, anterior, correccion }) {
@@ -45,14 +51,47 @@ export function leerEstimacion(respuesta) {
   const txt = String(respuesta.choices[0].message.content).replace(/^\s*```(json)?|```\s*$/g, '');
   const j = JSON.parse(txt);
   const n = (x) => Math.max(0, Math.round(Number(x) || 0));
-  return {
-    nombre: String(j.nombre || 'Comida').slice(0, 60),
-    kcal: n(j.kcal),
-    p: n(j.proteina),
-    c: n(j.carbohidratos),
-    g: n(j.grasa),
-    detalle: String(j.detalle || ''),
-  };
+  const alimentos = (Array.isArray(j.alimentos) ? j.alimentos : []).map((a) => ({
+    nombre: String(a.nombre || '').slice(0, 40),
+    gramos: n(a.gramos),
+    kcal: n(a.kcal),
+    p: n(a.proteina),
+    c: n(a.carbohidratos),
+    g: n(a.grasa),
+    q: 1,
+  }));
+  if (!alimentos.length) throw new Error('sin alimentos');
+  const est = { nombre: String(j.nombre || alimentos[0].nombre || 'Comida').slice(0, 60), alimentos, porcion: 1 };
+  return { ...est, ...totales(est) };
+}
+
+// Totales = Σ alimento × su cantidad, × porción del plato. Se guardan en el ítem para sumar sin recalcular.
+export function totales({ alimentos, porcion = 1 }) {
+  const t = (k) => Math.round(alimentos.reduce((s, a) => s + a[k] * a.q, 0) * porcion);
+  return { kcal: t('kcal'), p: t('p'), c: t('c'), g: t('g') };
+}
+
+// Comidas guardadas antes de separar alimentos: un solo alimento con sus totales.
+export const alimentosDe = (it) =>
+  it.alimentos || [{ nombre: it.nombre || it.texto || 'Comida', gramos: 0, kcal: it.kcal || 0, p: it.p || 0, c: it.c || 0, g: it.g || 0, q: 1 }];
+
+export const PASOS = [0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4];
+export function paso(q, dir) {
+  const i = dir > 0 ? PASOS.findIndex((x) => x > q) : PASOS.findLastIndex((x) => x < q);
+  return i < 0 ? q : PASOS[i];
+}
+export function fraccion(x) {
+  const ent = Math.floor(x);
+  const fr = { 0.25: '¼', 0.5: '½', 0.75: '¾' }[Math.round((x - ent) * 100) / 100];
+  if (fr) return (ent || '') + fr;
+  return Number.isInteger(x) ? String(x) : String(x).replace('.', ',');
+}
+
+// Para la corrección: lo que se estimó, con las cantidades que dejó la persona.
+export function describir(it) {
+  const pr = it.porcion || 1;
+  const als = alimentosDe(it).map((a) => `${a.nombre}${a.gramos ? ' ' + Math.round(a.gramos * a.q * pr) + ' g' : ''}`).join(', ');
+  return `${it.nombre} · ${it.kcal} kcal (${als})`;
 }
 
 export const pad = (n) => String(n).padStart(2, '0');
