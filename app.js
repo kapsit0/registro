@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '10';
+const VERSION = '11';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -28,7 +28,8 @@ async function tx(modo, f) {
   });
 }
 let items = [];
-const marcarCambio = () => localStorage.setItem('cambios', (Number(localStorage.getItem('cambios')) || 0) + 1);
+// try: el contador del recordatorio nunca debe impedir que se guarde un registro
+const marcarCambio = () => { try { localStorage.setItem('cambios', (Number(localStorage.getItem('cambios')) || 0) + 1); } catch {} };
 async function guardar(it) {
   if (!items.includes(it)) items.push(it);
   marcarCambio();
@@ -246,7 +247,9 @@ async function procesarCola() {
       it.nota = 'estimando';
       render();
       try {
-        Object.assign(it, await estimar(it), { estado: 'ok', nota: '' });
+        const est = await estimar(it);
+        if (it.estado !== 'pendiente') continue; // la persona la guardó a mano mientras estimaba: manda lo suyo
+        Object.assign(it, est, { estado: 'ok', nota: '' });
         delete it.foto; // la foto solo sirve para estimar; corregir usa la estimación anterior
         delete it.correccion;
         delete it.detalle; // formato antiguo: ahora va en alimentos
@@ -349,10 +352,10 @@ async function anotarGasto(cat) {
   const monto = L.leerMonto($('#g-monto').value);
   if (!monto) { $('#g-monto').focus(); return; }
   const g = { id: crypto.randomUUID(), tipo: 'gasto', t: new Date().toISOString(), monto, cat, detalle: $('#g-detalle').value.trim() };
-  await guardar(g);
-  $('#g-monto').value = '';
+  $('#g-monto').value = ''; // antes de guardar: un doble toque no anota dos veces
   $('#g-detalle').value = '';
   document.activeElement.blur();
+  await guardar(g);
   semOff = 0;
   render();
   aviso(`${L.pesos(monto)} · ${cat}`, 4000, ['Deshacer', async () => { await borrar(g); render(); }]);

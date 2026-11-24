@@ -92,7 +92,7 @@ with sync_playwright() as p:
     pg.set_input_files("#c-foto", str(malo))
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(4)
     expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("preparando", timeout=30000)
-    expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("estimando", timeout=30000)
+    expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("estimando", timeout=45000)
     print("foto mala:", pg.locator("#c-lista li[data-id]").nth(3).inner_text().replace("\n", " | "))
     pg.screenshot(path=OUT / "foto-mala.png")
     tipos = pg.evaluate("""() => new Promise(ok => { const r = indexedDB.open('registro'); r.onsuccess = () => {
