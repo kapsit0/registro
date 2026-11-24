@@ -45,6 +45,14 @@ assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', 
   const r = L.recientes(lista, new Date(2026, 10, 23, 20));
   assert.deepEqual(r.map((i) => i.nombre), ['pan con palta ', 'Yogurt', 'Pastel']); // más veces primero, la última versión
   assert.equal(L.recientes(lista, new Date(2026, 11, 25)).length, 0); // más de 30 días
+  // buscar: todo el historial, sin tildes ni mayúsculas, palabras en cualquier orden, también en lo que se escribió
+  lista.push({ ...c('Plátano', 2), texto: '1 banana grande' });
+  const b = (q, hoy = new Date(2026, 10, 23, 20)) => L.recientes(lista, hoy, 8, 'comida', q).map((i) => i.nombre);
+  assert.deepEqual(b('PALTA pan'), ['pan con palta ']);
+  assert.deepEqual(b('platano', new Date(2027, 5, 1)), ['Plátano']);
+  assert.deepEqual(b('banana'), ['Plátano']);
+  assert.deepEqual(b('foto'), []); // las fallidas no se repiten
+  assert.deepEqual(b('  '), ['pan con palta ', 'Yogurt', 'Plátano', 'Pastel']); // solo espacios = sin buscar
   const g = (monto, cat, detalle, dia) => ({ tipo: 'gasto', monto, cat, detalle, t: new Date(2026, 10, dia, 13).toISOString() });
   const gs = [g(4500, 'Comida', 'almuerzo', 20), g(4500, 'Comida', 'Almuerzo ', 21), g(20000, 'Combustible', '', 21), g(4500, 'Super', 'almuerzo', 22)];
   assert.deepEqual(L.recientes(gs, new Date(2026, 10, 23), 8, 'gasto').map((i) => `${i.cat} ${i.monto}`),

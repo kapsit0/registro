@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '12';
+const VERSION = '13';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -129,8 +129,7 @@ function renderComida() {
     resto,
     pend ? `${pend} sin estimar` : '',
   ].filter(Boolean).join(' · ');
-  $('#c-recientes').innerHTML = L.recientes(items)
-    .map((i) => `<button type="button" data-rep="${i.id}">${esc(i.nombre)}<small>${L.miles(i.kcal)}</small></button>`).join('');
+  pintarRecientes();
   let grupo = '';
   $('#c-lista').innerHTML = del.length
     ? del.map((i) => {
@@ -144,12 +143,20 @@ function renderComida() {
         const porc = i.porcion && i.porcion !== 1 ? ` · ${L.fraccion(i.porcion)} porción` : '';
         const sub = i.estado === 'ok' ? `P${i.p} C${i.c} G${i.g}${porc}` : i.nota || 'estimando';
         const clase = i.estado === 'ok' ? '' : i.estado === 'error' ? 'error' : 'pendiente';
-        return cab + `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>` +
+        const mini = typeof i.foto === 'string' ? `<img class="miniatura" src="${esc(i.foto)}" alt="">` : ''; // solo mientras no se estima
+        return cab + `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>${mini}` +
           `<span class="txt"><b>${esc(i.nombre || i.texto || 'Foto')}</b><small>${esc(sub)}</small></span>` +
           `<span class="num">${i.estado === 'ok' ? L.miles(i.kcal) : '…'}</span></li>`;
       }).join('')
     : '<li class="vacio">Nada anotado</li>';
 }
+
+// al escribir, las sugerencias pasan a ser lo ya anotado que coincide: repetirlo no gasta IA y anda sin internet
+function pintarRecientes() {
+  $('#c-recientes').innerHTML = L.recientes(items, new Date(), 8, 'comida', $('#c-texto').value)
+    .map((i) => `<button type="button" data-rep="${i.id}">${esc(i.nombre)}<small>${L.miles(i.kcal)}</small></button>`).join('');
+}
+$('#c-texto').addEventListener('input', pintarRecientes);
 
 function renderGasto() {
   const ini = L.inicioSemana(new Date());
@@ -297,6 +304,24 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.id) abrirEditar(b.dataset.id);
 });
 
+// deslizar hacia la derecha = día (o semana) anterior; las filas de sugerencias tienen su propio desplazamiento
+let toque = null;
+document.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  toque = e.touches.length === 1 && !e.target.closest('.recientes, dialog, input') ? { x: t.clientX, y: t.clientY } : null;
+}, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (!toque) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - toque.x;
+  const dy = t.clientY - toque.y;
+  toque = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+  if (tab === 'comida') diaOff = Math.min(0, diaOff + (dx > 0 ? -1 : 1));
+  else semOff = Math.min(0, semOff + (dx > 0 ? -1 : 1));
+  render();
+});
+
 $('#c-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const texto = $('#c-texto').value.trim();
@@ -314,6 +339,8 @@ async function repetir(id) {
   const it = { id: crypto.randomUUID(), tipo: 'comida', t: nuevaHora(), estado: 'ok', nota: '', nombre: o.nombre,
     alimentos: structuredClone(L.alimentosDe(o)), porcion: o.porcion || 1 };
   Object.assign(it, L.totales(it));
+  $('#c-texto').value = ''; // si venía de buscar
+  document.activeElement.blur();
   await guardar(it);
   render();
   aviso(`${it.nombre} · ${L.miles(it.kcal)} kcal`, 4000, ['Deshacer', async () => { await borrar(it); render(); }]);
@@ -407,6 +434,12 @@ function abrirEditar(id) {
        ${campoHora}
        <div class="acciones"><button value="borrar" class="peligro">Borrar</button>
          <button value="guardar" class="primario">Guardar</button></div>`;
+  // Intro del teclado = Guardar (Corregir si se escribió una corrección); si no, el envío implícito toca el primer botón: Borrar
+  f.onkeydown = (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    dlg.close(e.target.name === 'correccion' && e.target.value.trim() ? 'corregir' : 'guardar');
+  };
   dlg.onclose = async () => {
     const v = Object.fromEntries(new FormData(f));
     const accion = dlg.returnValue;

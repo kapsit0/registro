@@ -87,16 +87,22 @@ export function fraccion(x) {
   return Number.isInteger(x) ? String(x) : String(x).replace('.', ',');
 }
 
+export const normal = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+
 // Comidas para repetir con un toque: las más frecuentes de los últimos 30 días (por nombre), la última versión de cada una.
 // Gastos: mismo monto, categoría y detalle cuentan como el mismo.
-export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida') {
-  const desde = new Date(ahora - 30 * 864e5).toISOString();
+// buscar: todo el historial que tenga cada palabra escrita (sin tildes ni mayúsculas).
+export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida', buscar = '') {
+  const palabras = normal(buscar).split(/\s+/).filter(Boolean);
+  const desde = palabras.length ? '' : new Date(ahora - 30 * 864e5).toISOString();
   const clave = tipo === 'comida'
-    ? (i) => i.estado === 'ok' && String(i.nombre || '').trim().toLowerCase()
-    : (i) => `${i.cat}|${i.monto}|${String(i.detalle || '').trim().toLowerCase()}`;
+    ? (i) => i.estado === 'ok' && normal(i.nombre)
+    : (i) => `${i.cat}|${i.monto}|${normal(i.detalle)}`;
   const m = new Map();
   for (const i of items) {
     if (i.tipo !== tipo || i.t < desde) continue;
+    const texto = palabras.length && normal(`${i.nombre || ''} ${i.texto || ''} ${i.cat || ''} ${i.detalle || ''}`);
+    if (texto && !palabras.every((w) => texto.includes(w))) continue;
     const k = clave(i);
     if (!k) continue;
     const r = m.get(k) || { veces: 0, ult: i };

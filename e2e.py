@@ -32,7 +32,7 @@ with sync_playwright() as p:
         ctx = nav.new_context(**{**p.devices["iPhone 15"], "accept_downloads": True})
     else:
         nav = p.chromium.launch(channel="chrome", headless=True)
-        ctx = nav.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, accept_downloads=True)
+        ctx = nav.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, accept_downloads=True, has_touch=True)
     ctx.add_init_script("delete Navigator.prototype.canShare; delete Navigator.prototype.share")  # Chrome Mac sí tiene hoja de compartir; aquí probamos la descarga
     pg = ctx.new_page()
     pg.on("response", lambda r: r.status >= 400 and print("404:", r.url))
@@ -173,6 +173,7 @@ with sync_playwright() as p:
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
     pg.set_input_files("#c-foto-galeria", str(foto))
     expect(pg.locator("#c-lista li[data-id]").nth(n0)).to_contain_text("sin conexión")
+    expect(pg.locator("#c-lista li[data-id]").nth(n0).locator("img.miniatura")).to_have_count(1)
     pg.locator("#c-lista li[data-id]").nth(n0).click(); pg.click("#editar button[value=borrar]")
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
     pg.click("#aviso button")
@@ -210,6 +211,32 @@ with sync_playwright() as p:
     pg.click("[data-tab=comida]")
     pg.screenshot(path=OUT / "v7-comida.png")
     print("v7: semana, hoy y gasto frecuente ok")
+
+    # v13: al escribir se busca lo ya anotado (sin IA), Intro en editar = Guardar (antes tocaba Borrar)
+    n0 = pg.locator("#c-lista li[data-id]").count()
+    pg.fill("#c-texto", "PLATANO")
+    expect(pg.locator("#c-recientes button")).to_have_count(1)
+    pg.click("#c-recientes button")
+    expect(pg.locator("#c-texto")).to_have_value("")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0 + 1)
+    pg.click("#aviso button")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
+    pg.click("[data-tab=gasto]")
+    pg.locator("#g-lista li[data-id]", has_text="Hogar").click()
+    pg.fill("#editar [name=detalle]", "ampolleta"); pg.press("#editar [name=detalle]", "Enter")
+    expect(pg.locator("#g-lista li[data-id]", has_text="ampolleta")).to_have_count(1)
+    pg.click("[data-tab=comida]")
+    if MOTOR == "chrome":  # deslizar: toques por DevTools
+        cdp_t = ctx.new_cdp_session(pg)
+        def deslizar(x0, x1, y=600):
+            cdp_t.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y}]})
+            for x in range(x0, x1, (x1 - x0) // 5):
+                cdp_t.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
+            cdp_t.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+        deslizar(60, 330); expect(pg.locator("#c-dia")).to_have_text("Ayer")
+        deslizar(330, 60); expect(pg.locator("#c-dia")).to_have_text("Hoy")
+        deslizar(330, 60); expect(pg.locator("#c-dia")).to_have_text("Hoy")  # no pasa de hoy
+    print("v13: buscar, Intro y deslizar ok")
 
     # push de recordatorio (solo Chrome: entrega el push por DevTools y revisa la notificación)
     if MOTOR == "chrome":
