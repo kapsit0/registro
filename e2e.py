@@ -99,13 +99,34 @@ with sync_playwright() as p:
       const q = r.result.transaction('items').objectStore('items').getAll(); q.onsuccess = () => ok(q.result.filter(i => i.foto).map(i => typeof i.foto)); }; })""")
     assert tipos == ["string"], f"foto guardada como {tipos} (debe ser texto, no Blob)"
 
-    # export Excel (en el Mac no hay hoja de compartir → descarga)
+    # punto de recordatorio: cambios sin guardar y lo último guardado hace más de 3 días
+    pg.evaluate("localStorage.setItem('guardado', new Date(Date.now() - 5 * 864e5).toISOString())")
+    pg.reload()
+    expect(pg.locator("#abrir-ajustes")).to_have_class(re.compile("punto"))
+    expect(pg.locator("#en-safari")).to_be_visible() if MOTOR == "webkit" else expect(pg.locator("#en-safari")).to_be_hidden()
+
+    # Guardar en iCloud: gastos para el Excel + respaldo (en el Mac no hay hoja de compartir → 2 descargas)
     pg.click("#abrir-ajustes")
-    with pg.expect_download() as dl:
-        pg.click("#exportar-excel")
-    lineas = Path(dl.value.path()).read_text().strip().split("\n")
+    expect(pg.locator("#version")).to_contain_text("guardado hace 5 días")
+    descargas = []
+    pg.on("download", lambda d: descargas.append(d))
+    pg.click("#guardar-icloud")
+    pg.wait_for_timeout(2000)
+    archivos = {d.suggested_filename: Path(d.path()).read_text() for d in descargas}
+    assert sorted(archivos) == ["gastos_app.txt", "registro-respaldo.txt"], sorted(archivos)
+    lineas = archivos["gastos_app.txt"].strip().split("\n")
     assert len(lineas) == 2 and lineas[0].endswith(";4500;Comida;almuerzo") and lineas[1].endswith(";2000;Hogar;"), lineas
+    respaldo = json.loads(archivos["registro-respaldo.txt"])
+    assert len(respaldo) == 6 and not any("foto" in i for i in respaldo), [(i["tipo"], "foto" in i) for i in respaldo]
+    expect(pg.locator("#version")).to_contain_text("guardado hoy")
+    expect(pg.locator("#abrir-ajustes")).not_to_have_class(re.compile("punto"))
+    respaldo_ruta = OUT / "respaldo.txt"; respaldo_ruta.write_text(archivos["registro-respaldo.txt"])
+    pg.set_input_files("#restaurar", str(respaldo_ruta))
+    expect(pg.locator("#aviso")).to_contain_text("0 restaurados")  # ya estaban todos
     pg.click("#ajustes button[value=ok]")
+    pg.click("[data-tab=gasto]")
+    expect(pg.locator("#g-por-cat")).to_have_text("Comida $ 4.500 · Hogar $ 2.000")
+    pg.click("[data-tab=comida]")
 
     # porciones sin escribir: ½ del plato y menos de un alimento
     pg.fill("#c-texto", "arroz con pollo"); pg.press("#c-texto", "Enter")

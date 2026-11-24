@@ -37,6 +37,9 @@ header { display: flex; gap: 8px; align-items: center; }
 .seg { flex: 1; display: flex; background: var(--linea); border-radius: 10px; padding: 2px; }
 .seg button { flex: 1; border: 0; background: none; padding: 7px 0; border-radius: 8px; font-size: 15px; font-weight: 600; color: var(--suave); }
 .seg button[aria-selected="true"] { background: var(--tarjeta); color: var(--tinta); box-shadow: 0 1px 2px #0002; }
+#abrir-ajustes { position: relative; }
+#abrir-ajustes.punto::after { content: ""; position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--peligro); }
+.banner { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--peligro); color: var(--peligro); font-size: 14px; }
 .icono { width: 40px; height: 40px; border: 0; background: none; display: grid; place-items: center; color: var(--suave); padding: 0; flex: none; }
 .icono svg { width: 22px; height: 22px; }
 .fecha { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 2px; color: var(--suave); font-size: 15px; }
@@ -72,8 +75,8 @@ input:focus, select:focus { border-color: var(--acento); }
 #c-barra { margin-top: 8px; }
 .fecha .etiqueta { width: auto; font-size: 15px; color: var(--suave); }
 .semana { display: grid; grid-template-columns: repeat(7, 1fr); margin: 2px 4px 8px; }
-.semana button { border: 0; background: none; display: grid; justify-items: center; gap: 4px; padding: 4px 0; font-size: 12px; color: var(--suave); }
-.semana i { width: 7px; height: 7px; border-radius: 50%; background: var(--linea); }
+.semana button { border: 0; background: none; display: grid; grid-template-rows: auto 22px; justify-items: center; gap: 3px; padding: 4px 0; font-size: 12px; color: var(--suave); }
+.semana i { width: 7px; height: 7px; border-radius: 4px; background: var(--linea); align-self: end; }
 .semana .con i { background: var(--acento); }
 .semana .sel { color: var(--tinta); font-weight: 700; }
 .semana button:disabled { opacity: .3; }
@@ -138,6 +141,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 </style>
 </head>
 <body>
+<div id="en-safari" class="banner" hidden>Estás en Safari: tus datos se guardan aparte. Ábrela desde el ícono de inicio.</div>
 <header>
   <div class="seg" role="tablist">
     <button role="tab" data-tab="comida">Comida</button>
@@ -174,6 +178,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
   <div class="cifra" id="g-quedan"></div>
   <div class="barra" id="g-barra"><i></i></div>
   <div class="sub" id="g-de"></div>
+  <div class="sub" id="g-por-cat"></div>
   <div class="fila">
     <input id="g-monto" inputmode="numeric" placeholder="$ monto" aria-label="Monto" autocomplete="off">
     <input id="g-detalle" placeholder="detalle" aria-label="Detalle" autocomplete="off" enterkeyhint="done">
@@ -192,9 +197,8 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
     <label>Categorías<input name="categorias" autocapitalize="words"></label>
     <label>Clave OpenRouter<input name="clave" type="password" autocomplete="off" spellcheck="false"></label>
     <div class="acciones">
-      <button type="button" id="exportar-excel">Gastos → Excel</button>
-      <button type="button" id="respaldar">Respaldo</button>
-      <label class="falso-boton"><input id="restaurar" type="file" accept="application/json,.json" hidden>Restaurar</label>
+      <button type="button" id="guardar-icloud" aria-label="Guardar gastos para el Excel y respaldo">Guardar en iCloud</button>
+      <label class="falso-boton"><input id="restaurar" type="file" accept=".txt,.json,text/plain,application/json" hidden>Restaurar</label>
     </div>
     <div class="acciones"><button value="ok" class="primario">Listo</button></div>
     <div class="pie" id="version"></div>

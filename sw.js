@@ -1,5 +1,5 @@
 // Offline: responde desde la caché y actualiza en segundo plano (la versión nueva aparece al abrir la próxima vez).
-const CACHE = 'registro-2';
+const CACHE = 'registro-9'; // subirlo en cada versión: así la app avisa «Versión nueva»
 const ARCHIVOS = ['./', 'index.html', 'app.js', 'logica.js', 'manifest.webmanifest', 'icono-180.png', 'icono-512.png'];
 
 self.addEventListener('install', (e) => {

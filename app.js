@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '8';
+const VERSION = '9';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -28,12 +28,15 @@ async function tx(modo, f) {
   });
 }
 let items = [];
+const marcarCambio = () => localStorage.setItem('cambios', (Number(localStorage.getItem('cambios')) || 0) + 1);
 async function guardar(it) {
   if (!items.includes(it)) items.push(it);
+  marcarCambio();
   try { await tx('readwrite', (s) => s.put(it)); } catch (e) { aviso('No se pudo guardar: ' + motivo(e), 8000); }
 }
 async function borrar(it) {
   items = items.filter((i) => i !== it);
+  marcarCambio();
   try { await tx('readwrite', (s) => s.delete(it.id)); } catch (e) { aviso('No se pudo borrar: ' + motivo(e), 8000); }
 }
 
@@ -68,6 +71,7 @@ function render() {
   $('#gasto').hidden = tab !== 'gasto';
   renderComida();
   renderGasto();
+  pintarGuardado();
 }
 
 function diaVisto() {
@@ -86,12 +90,19 @@ function renderComida() {
   $('#c-sig').disabled = diaOff >= 0;
   // franja lun–dom de la semana que se mira: punto = ese día tiene comidas
   const ini = L.inicioSemana(d);
-  const conComida = new Set(items.filter((i) => i.tipo === 'comida' && i.estado === 'ok').map((i) => L.diaClave(new Date(i.t))));
-  $('#c-semana').innerHTML = [...'LMMJVSD'].map((letra, n) => {
-    const dia = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + n);
+  const kcalDia = new Map();
+  for (const i of items) if (i.tipo === 'comida' && i.estado === 'ok') {
+    const k = L.diaClave(new Date(i.t));
+    kcalDia.set(k, (kcalDia.get(k) || 0) + i.kcal);
+  }
+  const dias = [...'LMMJVSD'].map((letra, n) => ({ letra, dia: new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + n) }));
+  const ref = cfg.meta || Math.max(1, ...dias.map((x) => kcalDia.get(L.diaClave(x.dia)) || 0)); // barra llena = meta (o el día más alto)
+  $('#c-semana').innerHTML = dias.map(({ letra, dia }) => {
     const off = diaOff + Math.round((dia - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
-    const clases = [conComida.has(L.diaClave(dia)) ? 'con' : '', off === diaOff ? 'sel' : ''].join(' ');
-    return `<button type="button" class="${clases}" data-ir="${off}" ${off > 0 ? 'disabled' : ''} aria-label="${L.etiquetaDia(dia, new Date())}">${letra}<i></i></button>`;
+    const kc = kcalDia.get(L.diaClave(dia)) || 0;
+    const clases = [kc ? 'con' : '', off === diaOff ? 'sel' : ''].join(' ');
+    return `<button type="button" class="${clases}" data-ir="${off}" ${off > 0 ? 'disabled' : ''} aria-label="${L.etiquetaDia(dia, new Date())}${kc ? ' · ' + L.miles(kc) + ' kcal' : ''}">` +
+      `${letra}<i style="height:${kc ? 7 + Math.round(15 * Math.min(1, kc / ref)) : 7}px"></i></button>`;
   }).join('');
   const kcal = L.sumar(ok, 'kcal');
   $('#c-kcal').textContent = L.miles(kcal);
@@ -145,6 +156,9 @@ function renderGasto() {
   $('#g-barra i').style.width = Math.max(0, cfg.presupuesto ? (100 * quedan) / cfg.presupuesto : 0) + '%'; // se vacía al gastar
   $('#g-de').textContent = `quedan de ${L.pesos(cfg.presupuesto)}` + (semOff === 0 ? '' : ` · gastado ${L.pesos(gastado)}`);
   $('#g-cats').innerHTML = cfg.categorias.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  const porCat = new Map();
+  for (const i of sem) porCat.set(i.cat, (porCat.get(i.cat) || 0) + i.monto);
+  $('#g-por-cat').textContent = [...porCat].sort((a, b) => b[1] - a[1]).map(([c, m]) => `${c} ${L.pesos(m)}`).join(' · ');
   $('#g-cats').classList.toggle('listo', L.leerMonto($('#g-monto').value) > 0);
   $('#g-recientes').innerHTML = L.recientes(items, new Date(), 6, 'gasto')
     .map((i) => `<button type="button" data-repg="${i.id}">${esc(i.detalle || i.cat)}<small>${L.pesos(i.monto)}</small></button>`).join('');
@@ -449,7 +463,7 @@ $('#abrir-ajustes').addEventListener('click', () => {
   f.meta.value = cfg.meta ? L.miles(cfg.meta) : '';
   f.categorias.value = cfg.categorias.join(', ');
   f.clave.value = cfg.clave;
-  $('#version').textContent = `v${VERSION} · ${items.length} registros`;
+  pintarGuardado();
   $('#ajustes').showModal();
 });
 $('#ajustes').addEventListener('close', () => {
@@ -465,28 +479,48 @@ $('#ajustes').addEventListener('close', () => {
   procesarCola();
 });
 
-async function compartir(nombre, texto, tipo) {
-  const archivo = new File([texto], nombre, { type: tipo });
-  if (navigator.canShare?.({ files: [archivo] })) {
-    try { await navigator.share({ files: [archivo] }); } catch (e) { if (e.name !== 'AbortError') aviso('No se pudo compartir'); }
-    return;
+// true = la persona completó la hoja de compartir (o se descargó, fuera del iPhone)
+async function compartir(archivos) {
+  if (navigator.canShare?.({ files: archivos })) {
+    try { await navigator.share({ files: archivos }); return true; }
+    catch (e) { if (e.name !== 'AbortError') aviso('No se pudo compartir: ' + motivo(e), 8000); return false; }
   }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(archivo);
-  a.download = nombre;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  for (const f of archivos) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(f);
+    a.download = f.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  return true;
 }
 
-// Siempre el archivo completo: el importador de Finanzas descarta las líneas que ya importó.
-$('#exportar-excel').addEventListener('click', () => {
+// Un solo botón: gastos para el Excel + respaldo de todo, juntos (Save to Files → iCloud Drive/Finanzas).
+// Siempre completos: el importador de Finanzas descarta líneas ya importadas; el respaldo reemplaza al anterior.
+// .txt también el respaldo: la hoja de compartir acepta texto en todos lados, JSON no siempre.
+$('#guardar-icloud').addEventListener('click', async () => {
   const gastos = items.filter((i) => i.tipo === 'gasto').sort((a, b) => (a.t < b.t ? -1 : 1));
-  compartir('gastos_app.txt', gastos.map(L.lineaExcel).join('\n') + '\n', 'text/plain');
-});
-$('#respaldar').addEventListener('click', () => {
   const sinFotos = items.map(({ foto, ...resto }) => resto);
-  compartir(`registro-${L.diaClave(new Date())}.json`, JSON.stringify(sinFotos), 'application/json');
+  const ok = await compartir([
+    new File([gastos.map(L.lineaExcel).join('\n') + '\n'], 'gastos_app.txt', { type: 'text/plain' }),
+    new File([JSON.stringify(sinFotos)], 'registro-respaldo.txt', { type: 'text/plain' }),
+  ]);
+  if (!ok) return;
+  localStorage.setItem('guardado', new Date().toISOString());
+  localStorage.setItem('cambios', '0');
+  pintarGuardado();
 });
+
+// Punto en Ajustes: hay cambios sin guardar y lo último guardado (o el dato más viejo) tiene más de 3 días.
+function pintarGuardado() {
+  const ult = localStorage.getItem('guardado');
+  const cambios = Number(localStorage.getItem('cambios')) || 0;
+  const desde = ult || items.reduce((m, i) => (i.t < m ? i.t : m), new Date().toISOString());
+  $('#abrir-ajustes').classList.toggle('punto', cambios > 0 && Date.now() - new Date(desde) > 3 * 864e5);
+  const dias = ult ? Math.floor((Date.now() - new Date(ult)) / 864e5) : -1;
+  $('#version').textContent = `v${VERSION} · ${items.length} registros · ` +
+    (dias < 0 ? 'nunca guardado' : dias === 0 ? 'guardado hoy' : dias === 1 ? 'guardado ayer' : `guardado hace ${dias} días`);
+}
 $('#restaurar').addEventListener('change', async (e) => {
   const archivo = e.target.files[0];
   e.target.value = '';
@@ -509,10 +543,23 @@ $('#restaurar').addEventListener('change', async (e) => {
 
 // ---------- inicio ----------
 addEventListener('online', procesarCola);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); procesarCola(); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  render();
+  procesarCola();
+  navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {}); // al volver a la app, buscar versión nueva
+});
 setInterval(() => { if (items.some((i) => i.estado === 'pendiente')) procesarCola(); }, 20000);
 navigator.storage?.persist?.();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  const habia = !!navigator.serviceWorker.controller; // la primera instalación no es «versión nueva»
+  navigator.serviceWorker.register('sw.js');
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (habia) aviso('Versión nueva lista', 30000, ['Actualizar', () => location.reload()]);
+  });
+}
+// Abierta en Safari y no desde el ícono: Safari guarda los datos aparte, así que avisar.
+$('#en-safari').hidden = !(/iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !matchMedia('(display-mode: standalone)').matches);
 
 try { items = await tx('readonly', (s) => s.getAll()); } catch (e) { aviso('No se pudieron leer los datos: ' + motivo(e), 8000); }
 for (const it of items.filter((i) => i.estado === 'preparando')) { // la app se cerró a mitad de una foto
