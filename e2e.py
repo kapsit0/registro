@@ -108,6 +108,7 @@ with sync_playwright() as p:
     # Guardar en iCloud: gastos para el Excel + respaldo (en el Mac no hay hoja de compartir → 2 descargas)
     pg.click("#abrir-ajustes")
     expect(pg.locator("#version")).to_contain_text("guardado hace 5 días")
+    expect(pg.locator("#saldo")).to_contain_text("Saldo OpenRouter: US$ ", timeout=10000)
     descargas = []
     pg.on("download", lambda d: descargas.append(d))
     pg.click("#guardar-icloud")

@@ -129,7 +129,7 @@ export const diaCorto = (d) => `${DIAS[d.getDay()]} ${d.getDate()}`;
 // Comidas del día en Chile, por la hora en que se anotaron.
 export const momento = (d) => {
   const h = d.getHours();
-  return h < 11 ? 'Desayuno' : h < 16 ? 'Almuerzo' : h < 20 ? 'Once' : 'Cena';
+  return h < 5 ? 'Noche' : h < 11 ? 'Desayuno' : h < 16 ? 'Almuerzo' : h < 20 ? 'Once' : 'Cena';
 };
 
 // Lunes 00:00 local de la semana de d (semana lunes–domingo, como el panel de Finanzas).

@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '9';
+const VERSION = '10';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -464,6 +464,12 @@ $('#abrir-ajustes').addEventListener('click', () => {
   f.categorias.value = cfg.categorias.join(', ');
   f.clave.value = cfg.clave;
   pintarGuardado();
+  $('#saldo').textContent = '';
+  if (cfg.clave && navigator.onLine) // saldo de OpenRouter, para que «sin saldo» no pille por sorpresa
+    fetch('https://openrouter.ai/api/v1/credits', { headers: { Authorization: `Bearer ${cfg.clave}` }, signal: AbortSignal.timeout(8000) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(({ data }) => { $('#saldo').textContent = `Saldo OpenRouter: US$ ${(data.total_credits - data.total_usage).toFixed(2).replace('.', ',')}`; })
+      .catch(() => {});
   $('#ajustes').showModal();
 });
 $('#ajustes').addEventListener('close', () => {
