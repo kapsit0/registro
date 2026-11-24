@@ -62,12 +62,21 @@ input:focus, select:focus { border-color: var(--acento); }
 .boton.secundario { background: var(--tarjeta); color: var(--acento); border: 1px solid var(--linea); }
 .recientes { display: flex; gap: 8px; overflow-x: auto; margin: 10px -16px 0; padding: 0 16px; scrollbar-width: none; }
 .recientes::-webkit-scrollbar { display: none; }
+/* sugerencias para repetir: punteadas y con «+», distintas de las categorías */
 .recientes button {
-  flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--linea);
-  background: var(--tarjeta); font-size: 15px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: none; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px dashed var(--suave);
+  background: none; font-size: 14px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.recientes button::before { content: "+ "; color: var(--acento); font-weight: 700; }
 .recientes button small { color: var(--suave); margin-left: 4px; font-size: 13px; }
 #c-barra { margin-top: 8px; }
+.fecha .etiqueta { width: auto; font-size: 15px; color: var(--suave); }
+.semana { display: grid; grid-template-columns: repeat(7, 1fr); margin: 2px 4px 8px; }
+.semana button { border: 0; background: none; display: grid; justify-items: center; gap: 4px; padding: 4px 0; font-size: 12px; color: var(--suave); }
+.semana i { width: 7px; height: 7px; border-radius: 50%; background: var(--linea); }
+.semana .con i { background: var(--acento); }
+.semana .sel { color: var(--tinta); font-weight: 700; }
+.semana button:disabled { opacity: .3; }
 #c-barra.negativo i { background: var(--peligro); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .chips button { height: 44px; padding: 0 16px; border-radius: 22px; border: 1px solid var(--linea); background: var(--tarjeta); font-weight: 600; font-size: 15px; }
@@ -138,7 +147,8 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 </header>
 
 <section id="comida" hidden>
-  <nav class="fecha"><button data-dia="-1" aria-label="Día anterior">‹</button><span id="c-dia"></span><button data-dia="1" id="c-sig" aria-label="Día siguiente">›</button></nav>
+  <nav class="fecha"><button data-dia="-1" aria-label="Día anterior">‹</button><button id="c-dia" data-hoy="c" class="etiqueta"></button><button data-dia="1" id="c-sig" aria-label="Día siguiente">›</button></nav>
+  <div id="c-semana" class="semana"></div>
   <div class="cifra"><span id="c-kcal">0</span> <small>kcal</small></div>
   <div class="barra" id="c-barra" hidden><i></i></div>
   <div class="sub" id="c-macros"></div>
@@ -158,7 +168,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
 </section>
 
 <section id="gasto" hidden>
-  <nav class="fecha"><button data-sem="-1" aria-label="Semana anterior">‹</button><span id="g-semana"></span><button data-sem="1" id="g-sig" aria-label="Semana siguiente">›</button></nav>
+  <nav class="fecha"><button data-sem="-1" aria-label="Semana anterior">‹</button><button id="g-semana" data-hoy="g" class="etiqueta"></button><button data-sem="1" id="g-sig" aria-label="Semana siguiente">›</button></nav>
   <div class="cifra" id="g-quedan"></div>
   <div class="barra" id="g-barra"><i></i></div>
   <div class="sub" id="g-de"></div>
@@ -167,6 +177,7 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
     <input id="g-detalle" placeholder="detalle" aria-label="Detalle" autocomplete="off" enterkeyhint="done">
   </div>
   <div id="g-cats" class="chips"></div>
+  <div id="g-recientes" class="recientes" aria-label="Repetir gasto"></div>
   <ul id="g-lista" class="lista"></ul>
 </section>
 

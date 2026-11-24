@@ -88,12 +88,16 @@ export function fraccion(x) {
 }
 
 // Comidas para repetir con un toque: las más frecuentes de los últimos 30 días (por nombre), la última versión de cada una.
-export function recientes(items, ahora = new Date(), n = 8) {
+// Gastos: mismo monto, categoría y detalle cuentan como el mismo.
+export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida') {
   const desde = new Date(ahora - 30 * 864e5).toISOString();
+  const clave = tipo === 'comida'
+    ? (i) => i.estado === 'ok' && String(i.nombre || '').trim().toLowerCase()
+    : (i) => `${i.cat}|${i.monto}|${String(i.detalle || '').trim().toLowerCase()}`;
   const m = new Map();
   for (const i of items) {
-    if (i.tipo !== 'comida' || i.estado !== 'ok' || i.t < desde) continue;
-    const k = String(i.nombre || '').trim().toLowerCase();
+    if (i.tipo !== tipo || i.t < desde) continue;
+    const k = clave(i);
     if (!k) continue;
     const r = m.get(k) || { veces: 0, ult: i };
     r.veces++;

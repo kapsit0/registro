@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '6';
+const VERSION = '7';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -84,6 +84,15 @@ function renderComida() {
   const pend = del.length - ok.length;
   $('#c-dia').textContent = L.etiquetaDia(d, new Date());
   $('#c-sig').disabled = diaOff >= 0;
+  // franja lun–dom de la semana que se mira: punto = ese día tiene comidas
+  const ini = L.inicioSemana(d);
+  const conComida = new Set(items.filter((i) => i.tipo === 'comida' && i.estado === 'ok').map((i) => L.diaClave(new Date(i.t))));
+  $('#c-semana').innerHTML = [...'LMMJVSD'].map((letra, n) => {
+    const dia = new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + n);
+    const off = diaOff + Math.round((dia - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+    const clases = [conComida.has(L.diaClave(dia)) ? 'con' : '', off === diaOff ? 'sel' : ''].join(' ');
+    return `<button type="button" class="${clases}" data-ir="${off}" ${off > 0 ? 'disabled' : ''} aria-label="${L.etiquetaDia(dia, new Date())}">${letra}<i></i></button>`;
+  }).join('');
   const kcal = L.sumar(ok, 'kcal');
   $('#c-kcal').textContent = L.miles(kcal);
   $('#c-barra').hidden = !cfg.meta;
@@ -129,6 +138,8 @@ function renderGasto() {
   $('#g-de').textContent = `quedan de ${L.pesos(cfg.presupuesto)}` + (semOff === 0 ? '' : ` · gastado ${L.pesos(gastado)}`);
   $('#g-cats').innerHTML = cfg.categorias.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
   $('#g-cats').classList.toggle('listo', L.leerMonto($('#g-monto').value) > 0);
+  $('#g-recientes').innerHTML = L.recientes(items, new Date(), 6, 'gasto')
+    .map((i) => `<button type="button" data-repg="${i.id}">${esc(i.detalle || i.cat)}<small>${L.pesos(i.monto)}</small></button>`).join('');
   $('#g-lista').innerHTML = sem.length
     ? sem.map((i) => {
         const d = new Date(i.t);
@@ -244,6 +255,9 @@ document.addEventListener('click', (e) => {
   else if (b.dataset.sem) { semOff = Math.min(0, semOff + Number(b.dataset.sem)); render(); }
   else if (b.dataset.cat) anotarGasto(b.dataset.cat);
   else if (b.dataset.rep) repetir(b.dataset.rep);
+  else if (b.dataset.repg) repetirGasto(b.dataset.repg);
+  else if (b.dataset.ir) { diaOff = Number(b.dataset.ir); render(); }
+  else if (b.dataset.hoy) { if (b.dataset.hoy === 'c') diaOff = 0; else semOff = 0; render(); }
   else if (b.dataset.id) abrirEditar(b.dataset.id);
 });
 
@@ -267,6 +281,16 @@ async function repetir(id) {
   await guardar(it);
   render();
   aviso(`${it.nombre} · ${L.miles(it.kcal)} kcal`, 4000, ['Deshacer', async () => { await borrar(it); render(); }]);
+}
+
+async function repetirGasto(id) {
+  const o = items.find((i) => i.id === id);
+  if (!o) return;
+  const g = { id: crypto.randomUUID(), tipo: 'gasto', t: new Date().toISOString(), monto: o.monto, cat: o.cat, detalle: o.detalle || '' };
+  await guardar(g);
+  semOff = 0;
+  render();
+  aviso(`${L.pesos(g.monto)} · ${g.cat}`, 4000, ['Deshacer', async () => { await borrar(g); render(); }]);
 }
 
 async function fotoElegida(e) {
