@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '19';
+const VERSION = '20';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -110,13 +110,13 @@ function renderComida() {
   }
   const dias = [...'LMMJVSD'].map((letra, n) => ({ letra, dia: new Date(ini.getFullYear(), ini.getMonth(), ini.getDate() + n) }));
   const ref = cfg.meta || Math.max(1, ...dias.map((x) => kcalDia.get(L.diaClave(x.dia)) || 0)); // barra llena = meta (o el día más alto)
-  $('#c-semana').innerHTML = dias.map(({ letra, dia }) => {
+  poner($('#c-semana'), dias.map(({ letra, dia }) => {
     const off = diaOff + Math.round((dia - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
     const kc = kcalDia.get(L.diaClave(dia)) || 0;
     const clases = [kc ? 'con' : '', off === diaOff ? 'sel' : ''].join(' ');
     return `<button type="button" class="${clases}" data-ir="${off}" ${off > 0 ? 'disabled' : ''} aria-label="${L.etiquetaDia(dia, new Date())}${kc ? ' · ' + L.miles(kc) + ' kcal' : ''}">` +
       `${letra}<i style="height:${kc ? 7 + Math.round(15 * Math.min(1, kc / ref)) : 7}px"></i></button>`;
-  }).join('');
+  }).join(''));
   const kcal = L.sumar(ok, 'kcal');
   $('#c-kcal').textContent = L.miles(kcal);
   $('#c-barra').hidden = !cfg.meta;
@@ -132,7 +132,7 @@ function renderComida() {
   ].filter(Boolean).join(' · ');
   pintarRecientes();
   let grupo = '';
-  $('#c-lista').innerHTML = del.length
+  poner($('#c-lista'), del.length
     ? del.map((i) => {
         const m = L.momento(new Date(i.t));
         let cab = '';
@@ -144,18 +144,28 @@ function renderComida() {
         const porc = i.porcion && i.porcion !== 1 ? ` · ${L.fraccion(i.porcion)} porción` : '';
         const sub = i.estado === 'ok' ? `P${i.p} C${i.c} G${i.g}${porc}` : i.nota || 'estimando';
         const clase = i.estado === 'ok' ? '' : i.estado === 'error' ? 'error' : 'pendiente';
-        const mini = typeof i.foto === 'string' ? `<img class="miniatura" src="${esc(i.foto)}" alt="">` : ''; // solo mientras no se estima
+        const mini = typeof i.foto === 'string' ? `<img class="miniatura" src="${esc(i.foto)}" alt="" onerror="this.remove()">` : ''; // solo mientras no se estima; si no se puede mostrar, nada
         return cab + `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>${mini}` +
           `<span class="txt"><b>${esc(i.nombre || i.texto || 'Foto')}</b><small>${esc(sub)}</small></span>` +
           `<span class="num">${i.estado === 'ok' ? L.miles(i.kcal) : '…'}</span></li>`;
       }).join('')
-    : '<li class="vacio">Nada anotado</li>';
+    : '<li class="vacio">Nada anotado</li>');
+}
+
+// Cambia el contenido solo si cambió: un render en medio de un toque no reemplaza el botón (se perdía el toque).
+const pintado = new WeakMap(); // no en un atributo: las miniaturas pesan cientos de KB
+function poner(el, html) {
+  if (pintado.get(el) === html) return false;
+  pintado.set(el, html);
+  el.innerHTML = html;
+  return true;
 }
 
 // al escribir, las sugerencias pasan a ser lo ya anotado que coincide: repetirlo no gasta IA y anda sin internet
 function pintarRecientes() {
-  $('#c-recientes').innerHTML = L.recientes(items, new Date(), 8, 'comida', $('#c-texto').value)
-    .map((i) => `<button type="button" data-rep="${i.id}"><span>${esc(i.nombre)}</span><small>${L.miles(i.kcal)}</small></button>`).join('');
+  const el = $('#c-recientes');
+  if (poner(el, L.recientes(items, new Date(), 8, 'comida', $('#c-texto').value)
+    .map((i) => `<button type="button" data-rep="${i.id}"><span>${esc(i.nombre)}</span><small>${L.miles(i.kcal)}</small></button>`).join(''))) el.scrollLeft = 0;
 }
 $('#c-texto').addEventListener('input', pintarRecientes);
 
@@ -177,21 +187,21 @@ function renderGasto() {
   const diasQuedan = 7 - ((new Date().getDay() + 6) % 7); // hoy incluido: lunes 7 … domingo 1
   $('#g-de').textContent = `quedan de ${L.pesos(cfg.presupuesto)}` +
     (semOff !== 0 ? ` · gastado ${L.pesos(gastado)}` : quedan > 0 && diasQuedan > 1 ? ` · ${L.pesos(quedan / diasQuedan)}/día` : '');
-  $('#g-cats').innerHTML = cfg.categorias.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  poner($('#g-cats'), cfg.categorias.map((c) => `<button type="button" data-cat="${esc(c)}">${esc(c)}</button>`).join(''));
   const porCat = new Map();
   for (const i of sem) porCat.set(i.cat, (porCat.get(i.cat) || 0) + i.monto);
   $('#g-por-cat').textContent = [...porCat].sort((a, b) => b[1] - a[1]).map(([c, m]) => `${c} ${L.pesos(m)}`).join(' · ');
   $('#g-cats').classList.toggle('listo', L.leerMonto($('#g-monto').value) > 0);
-  $('#g-recientes').innerHTML = L.recientes(items, new Date(), 6, 'gasto')
-    .map((i) => `<button type="button" data-repg="${i.id}"><span>${esc(i.detalle || i.cat)}</span><small>${L.pesos(i.monto)}</small></button>`).join('');
-  $('#g-lista').innerHTML = sem.length
+  if (poner($('#g-recientes'), L.recientes(items, new Date(), 6, 'gasto')
+    .map((i) => `<button type="button" data-repg="${i.id}"><span>${esc(i.detalle || i.cat)}</span><small>${L.pesos(i.monto)}</small></button>`).join(''))) $('#g-recientes').scrollLeft = 0;
+  poner($('#g-lista'), sem.length
     ? sem.map((i) => {
         const d = new Date(i.t);
         return `<li data-id="${i.id}"><span class="hora">${L.diaCorto(d)}</span>` +
           `<span class="txt"><b>${esc(i.cat)}</b><small>${esc(i.detalle || L.hora(d))}</small></span>` +
           `<span class="num">${L.pesos(i.monto)}</span></li>`;
       }).join('')
-    : '<li class="vacio">Sin gastos</li>';
+    : '<li class="vacio">Sin gastos</li>');
 }
 
 // ---------- estimación de calorías (cola: espera internet si no hay) ----------

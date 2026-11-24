@@ -105,6 +105,7 @@ with sync_playwright() as p:
     expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("preparando", timeout=30000)
     expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("estimando", timeout=45000)
     print("foto mala:", pg.locator("#c-lista li[data-id]").nth(3).inner_text().replace("\n", " | "))
+    expect(pg.locator("#c-lista li[data-id]").nth(3).locator("img")).to_have_count(0)  # v20: sin miniatura rota
     pg.screenshot(path=OUT / "foto-mala.png")
     tipos = pg.evaluate("""() => new Promise(ok => { const r = indexedDB.open('registro'); r.onsuccess = () => {
       const q = r.result.transaction('items').objectStore('items').getAll(); q.onsuccess = () => ok(q.result.filter(i => i.foto).map(i => typeof i.foto)); }; })""")
