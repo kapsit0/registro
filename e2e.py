@@ -244,6 +244,12 @@ with sync_playwright() as p:
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
     ctx.set_offline(False)
     pg.click("[data-tab=gasto]")
+    # v22: Guardar un gasto exportado sin cambiarlo no toca su hora (antes perdía los segundos y el Excel lo duplicaba)
+    horas = "() => new Promise(ok => { const r = indexedDB.open('registro'); r.onsuccess = () => { const q = r.result.transaction('items').objectStore('items').getAll(); q.onsuccess = () => ok(q.result.filter(i => i.tipo === 'gasto').map(i => i.t).sort()); }; })"
+    antes = pg.evaluate(horas)
+    pg.locator("#g-lista li[data-id]", has_text="almuerzo").click(); pg.click("#editar button[value=guardar]")
+    expect(pg.locator("#aviso")).not_to_contain_text("Excel")
+    assert pg.evaluate(horas) == antes, (antes, pg.evaluate(horas))
     pg.locator("#g-lista li[data-id]", has_text="Hogar").click()
     pg.fill("#editar [name=detalle]", "ampolleta"); pg.press("#editar [name=detalle]", "Enter")
     expect(pg.locator("#g-lista li[data-id]", has_text="ampolleta")).to_have_count(1)

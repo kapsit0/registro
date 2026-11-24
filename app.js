@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '21';
+const VERSION = '22';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -466,7 +466,8 @@ function abrirEditar(id) {
   const b = { alimentos: structuredClone(L.alimentosDe(it)), porcion: it.porcion || 1 };
   let manual = false; // escribió kcal/P/C/G a mano: esos números mandan
   const dt = new Date(it.t);
-  const campoHora = `<label>Fecha y hora<input type="datetime-local" name="t" value="${L.diaClave(dt)}T${L.hora(dt)}"></label>`;
+  const horaVista = `${L.diaClave(dt)}T${L.hora(dt)}`;
+  const campoHora = `<label>Fecha y hora<input type="datetime-local" name="t" value="${horaVista}"></label>`;
   f.innerHTML = it.tipo === 'comida'
     ? `<label>Comida<input name="nombre" value="${esc(it.nombre || it.texto || '')}"></label>
        ${listo ? `<div class="porcion"><span>Porción</span><div class="mini">${[0.25, 0.5, 0.75, 1, 1.5, 2]
@@ -502,7 +503,8 @@ function abrirEditar(id) {
     // el importador de Finanzas solo agrega líneas: un gasto ya exportado que se cambia o borra hay que arreglarlo allá
     const enExcel = it.tipo === 'gasto' && exportados().includes(it.id);
     const lineaAntes = it.tipo === 'gasto' && L.lineaExcel(it);
-    if (accion === 'guardar' && v.t && !isNaN(new Date(v.t))) it.t = new Date(v.t).toISOString(); // datetime-local = hora local
+    // solo si se cambió: el campo no tiene segundos, y reescribir la hora cambiaba la línea del Excel (el importador la duplicaba)
+    if (accion === 'guardar' && v.t && v.t !== horaVista && !isNaN(new Date(v.t))) it.t = new Date(v.t).toISOString(); // datetime-local = hora local
     if (accion === 'borrar') {
       await borrar(it);
       aviso(enExcel ? 'Borrado aquí; en el Excel sigue' : 'Borrado', 5000, ['Deshacer', async () => { await guardar(it); render(); }]);
