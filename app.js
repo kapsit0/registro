@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '20';
+const VERSION = '21';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -400,9 +400,11 @@ async function fotoElegida(e) {
 }
 
 // Hora EXIF solo si es de hoy o ayer: una foto más vieja (una etiqueta de la semana pasada) se anota como siempre.
+// Sin EXIF (iOS a veces lo borra al convertir HEIC), la fecha del archivo, si no es la de recién (= momento de elegirla).
 async function horaDeFoto(archivo) {
   try {
-    const h = L.horaExif(await archivo.slice(0, 1 << 17).arrayBuffer());
+    const mod = archivo.lastModified < Date.now() - 2 * 60e3 ? new Date(archivo.lastModified) : null;
+    const h = L.horaExif(await archivo.slice(0, 1 << 17).arrayBuffer()) || mod;
     const ayer = new Date();
     ayer.setHours(0, 0, 0, 0);
     ayer.setDate(ayer.getDate() - 1);

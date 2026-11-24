@@ -183,6 +183,7 @@ with sync_playwright() as p:
     assert int(pg.text_content("#c-kcal").replace(".", "")) > k0
     pg.click("#aviso button")
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
+    os.utime(foto)  # de la galería cuenta la fecha del archivo (v21): que sea la de ahora
     pg.set_input_files("#c-foto-galeria", str(foto))
     expect(pg.locator("#c-lista li[data-id]").nth(n0)).to_contain_text("sin conexión")
     expect(pg.locator("#c-lista li[data-id]").nth(n0).locator("img.miniatura")).to_have_count(1)
@@ -307,6 +308,14 @@ with sync_playwright() as p:
         expect(f).to_contain_text("sin conexión")
         f.click(); pg.click("#editar button[value=borrar]")
     expect(pg.locator("#c-lista li[data-id]")).to_have_count(n_ayer)
+    # sin EXIF: la fecha del archivo (de ayer); una recién creada (= momento de elegirla) no cuenta
+    sin_exif = OUT / "sin_exif.jpg"; Image.new("RGB", (900, 700), "#b36b8f").save(sin_exif)
+    t_ayer = ayer.replace(hour=19, minute=40).timestamp(); os.utime(sin_exif, (t_ayer, t_ayer))
+    pg.click("#c-dia")
+    pg.set_input_files("#c-foto-galeria", str(sin_exif))
+    expect(pg.locator("#c-dia")).to_have_text("Ayer")
+    f = pg.locator("#c-lista li[data-id]", has_text="19:40"); expect(f).to_have_count(1)
+    f.click(); pg.click("#editar button[value=borrar]")
     pg.click("#c-dia")
     pg.set_input_files("#c-foto-galeria", vieja)
     expect(pg.locator("#c-dia")).to_have_text("Hoy")
