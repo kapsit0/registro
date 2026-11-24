@@ -117,9 +117,11 @@ export function fraccion(x) {
 export const normal = (s) => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 
 // Comidas para repetir con un toque: las más frecuentes de los últimos 30 días (por nombre), la última versión de cada una.
+// Primero lo anotado a esta misma hora del día (al desayuno, lo que se suele desayunar).
 // Gastos: mismo monto, categoría y detalle cuentan como el mismo.
 // buscar: todo el historial que tenga cada palabra escrita (sin tildes ni mayúsculas).
 export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida', buscar = '') {
+  const m0 = momento(ahora);
   const palabras = normal(buscar).split(/\s+/).filter(Boolean);
   const desde = palabras.length ? '' : new Date(ahora - 30 * 864e5).toISOString();
   const clave = tipo === 'comida'
@@ -132,12 +134,15 @@ export function recientes(items, ahora = new Date(), n = 8, tipo = 'comida', bus
     if (texto && !palabras.every((w) => texto.includes(w))) continue;
     const k = clave(i);
     if (!k) continue;
-    const r = m.get(k) || { veces: 0, ult: i };
+    const r = m.get(k) || { veces: 0, aEstaHora: 0, ult: i };
     r.veces++;
+    if (momento(new Date(i.t)) === m0) r.aEstaHora++;
     if (i.t > r.ult.t) r.ult = i;
     m.set(k, r);
   }
-  return [...m.values()].sort((a, b) => b.veces - a.veces || (a.ult.t < b.ult.t ? 1 : -1)).slice(0, n).map((r) => r.ult);
+  return [...m.values()]
+    .sort((a, b) => b.aEstaHora - a.aEstaHora || b.veces - a.veces || (a.ult.t < b.ult.t ? 1 : -1))
+    .slice(0, n).map((r) => r.ult);
 }
 
 // Para la corrección: lo que se estimó, con las cantidades que dejó la persona.

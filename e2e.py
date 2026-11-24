@@ -246,6 +246,25 @@ with sync_playwright() as p:
         deslizar(330, 60); expect(pg.locator("#c-dia")).to_have_text("Hoy")  # no pasa de hoy
     print("v13: buscar, Intro y deslizar ok")
 
+    # v15: repetir en otro día lo dice; al volver a la app tras >5 min, vuelve a Hoy
+    pg.click("[data-dia='-1']"); expect(pg.locator("#c-dia")).to_have_text("Ayer")
+    pg.locator("#c-recientes button").first.click()
+    expect(pg.locator("#aviso")).to_contain_text("· ayer")
+    pg.click("#aviso button")
+    pg.evaluate("""() => { const real = Date.now; const oculta = (v) => Object.defineProperty(document, 'hidden', { value: v, configurable: true });
+      oculta(true); document.dispatchEvent(new Event('visibilitychange'));
+      Date.now = () => real() + 6 * 60e3; oculta(false); document.dispatchEvent(new Event('visibilitychange'));
+      Date.now = real; delete document.hidden; }""")
+    expect(pg.locator("#c-dia")).to_have_text("Hoy")
+    # abrir un registro o Ajustes no enfoca un campo (en el iPhone abría el teclado encima de las porciones)
+    pg.locator("#c-lista li[data-id]").first.click()
+    assert pg.evaluate("document.activeElement.tagName") == "FORM"
+    pg.keyboard.press("Escape")
+    pg.click("#abrir-ajustes")
+    assert pg.evaluate("document.activeElement.tagName") == "FORM"
+    pg.keyboard.press("Escape")
+    print("v15: otro día avisado, vuelta a hoy y sin teclado al abrir ok")
+
     # v14: código de barras → Open Food Facts (154 kcal la lata de 350 ml)
     pg.set_input_files("#c-foto", str(barras))
     fila = pg.locator("#c-lista li[data-id]").last  # la más nueva (la lata de la primera foto también dice Coca)

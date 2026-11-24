@@ -53,6 +53,10 @@ assert.deepEqual([0, 0.25, 0.5, 1, 1.5, 2.75, 1.2].map(L.fraccion), ['0', '¼', 
   assert.deepEqual(b('banana'), ['Plátano']);
   assert.deepEqual(b('foto'), []); // las fallidas no se repiten
   assert.deepEqual(b('  '), ['pan con palta ', 'Yogurt', 'Plátano', 'Pastel']); // solo espacios = sin buscar
+  // a la hora del desayuno, primero lo desayunado aunque se haya comido menos veces
+  lista.push({ tipo: 'comida', estado: 'ok', nombre: 'Café con leche', t: new Date(2026, 10, 21, 8).toISOString() });
+  assert.deepEqual(L.recientes(lista, new Date(2026, 10, 23, 9)).map((i) => i.nombre), ['Café con leche', 'pan con palta ', 'Yogurt', 'Plátano', 'Pastel']);
+  assert.equal(L.recientes(lista, new Date(2026, 10, 23, 13))[0].nombre, 'pan con palta ');
   const g = (monto, cat, detalle, dia) => ({ tipo: 'gasto', monto, cat, detalle, t: new Date(2026, 10, dia, 13).toISOString() });
   const gs = [g(4500, 'Comida', 'almuerzo', 20), g(4500, 'Comida', 'Almuerzo ', 21), g(20000, 'Combustible', '', 21), g(4500, 'Super', 'almuerzo', 22)];
   assert.deepEqual(L.recientes(gs, new Date(2026, 10, 23), 8, 'gasto').map((i) => `${i.cat} ${i.monto}`),

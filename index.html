@@ -68,10 +68,11 @@ input:focus, select:focus { border-color: var(--acento); }
 /* sugerencias para repetir: punteadas y con «+», distintas de las categorías */
 .recientes button {
   flex: none; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px dashed var(--suave);
-  background: none; font-size: 14px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: none; font-size: 14px; max-width: 220px; display: flex; align-items: center; white-space: nowrap;
 }
-.recientes button::before { content: "+ "; color: var(--acento); font-weight: 700; }
-.recientes button small { color: var(--suave); margin-left: 4px; font-size: 13px; }
+.recientes button::before { content: "+"; color: var(--acento); font-weight: 700; margin-right: 4px; }
+.recientes button span { overflow: hidden; text-overflow: ellipsis; }
+.recientes button small { color: var(--suave); margin-left: 5px; font-size: 13px; flex: none; }
 #c-barra { margin-top: 8px; }
 .fecha .etiqueta { width: auto; font-size: 15px; color: var(--suave); }
 .semana { display: grid; grid-template-columns: repeat(7, 1fr); margin: 2px 4px 8px; }
@@ -104,7 +105,7 @@ dialog {
   max-height: calc(100dvh - env(safe-area-inset-top) - 24px); overflow-y: auto; overscroll-behavior: contain;
 }
 dialog::backdrop { background: #0006; }
-dialog form { display: grid; gap: 12px; }
+dialog form { display: grid; gap: 12px; outline: none; } /* el foco va al formulario, no a un campo: así no se abre el teclado solo */
 dialog label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
 dialog label input, dialog label select { color: var(--tinta); font-size: 17px; width: 100%; min-width: 0; }
 .grid4 { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -190,10 +191,10 @@ dialog label input, dialog label select { color: var(--tinta); font-size: 17px; 
   <ul id="g-lista" class="lista"></ul>
 </section>
 
-<dialog id="editar"><form method="dialog"></form></dialog>
+<dialog id="editar"><form method="dialog" tabindex="-1" autofocus></form></dialog>
 
 <dialog id="ajustes">
-  <form method="dialog">
+  <form method="dialog" tabindex="-1" autofocus>
     <label>Presupuesto semanal<input name="presupuesto" inputmode="numeric"></label>
     <label>Meta diaria (kcal)<input name="meta" inputmode="numeric" placeholder="sin meta"></label>
     <label>Categorías<input name="categorias" autocapitalize="words"></label>

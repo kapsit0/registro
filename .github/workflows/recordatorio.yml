@@ -1,5 +1,5 @@
 # Recordatorio a las 13:45 y 20:45 de Chile. Crons de verano (UTC−3) e invierno (UTC−4):
-# enviar_recordatorio.py descarta el que no corresponde. Secretos: PUSH_SUB y VAPID_PRIVADA.
+# enviar_recordatorio.py descarta el que no corresponde. Secretos: PUSH_SUB y VAPID_PRIVADA (./configurar_recordatorios.sh).
 name: Recordatorio
 on:
   schedule:

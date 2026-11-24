@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '14';
+const VERSION = '15';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -154,7 +154,7 @@ function renderComida() {
 // al escribir, las sugerencias pasan a ser lo ya anotado que coincide: repetirlo no gasta IA y anda sin internet
 function pintarRecientes() {
   $('#c-recientes').innerHTML = L.recientes(items, new Date(), 8, 'comida', $('#c-texto').value)
-    .map((i) => `<button type="button" data-rep="${i.id}">${esc(i.nombre)}<small>${L.miles(i.kcal)}</small></button>`).join('');
+    .map((i) => `<button type="button" data-rep="${i.id}"><span>${esc(i.nombre)}</span><small>${L.miles(i.kcal)}</small></button>`).join('');
 }
 $('#c-texto').addEventListener('input', pintarRecientes);
 
@@ -180,7 +180,7 @@ function renderGasto() {
   $('#g-por-cat').textContent = [...porCat].sort((a, b) => b[1] - a[1]).map(([c, m]) => `${c} ${L.pesos(m)}`).join(' · ');
   $('#g-cats').classList.toggle('listo', L.leerMonto($('#g-monto').value) > 0);
   $('#g-recientes').innerHTML = L.recientes(items, new Date(), 6, 'gasto')
-    .map((i) => `<button type="button" data-repg="${i.id}">${esc(i.detalle || i.cat)}<small>${L.pesos(i.monto)}</small></button>`).join('');
+    .map((i) => `<button type="button" data-repg="${i.id}"><span>${esc(i.detalle || i.cat)}</span><small>${L.pesos(i.monto)}</small></button>`).join('');
   $('#g-lista').innerHTML = sem.length
     ? sem.map((i) => {
         const d = new Date(i.t);
@@ -351,7 +351,8 @@ async function repetir(id) {
   document.activeElement.blur();
   await guardar(it);
   render();
-  aviso(`${it.nombre} · ${L.miles(it.kcal)} kcal`, 4000, ['Deshacer', async () => { await borrar(it); render(); }]);
+  const otroDia = diaOff ? ' · ' + L.etiquetaDia(new Date(it.t), new Date()).toLowerCase() : ''; // que no se anote en otro día sin notarlo
+  aviso(`${it.nombre} · ${L.miles(it.kcal)} kcal${otroDia}`, 4000, ['Deshacer', async () => { await borrar(it); render(); }]);
 }
 
 async function repetirGasto(id) {
@@ -626,8 +627,10 @@ $('#recordatorios').addEventListener('click', async () => {
 // ---------- inicio ----------
 espejoAjustes();
 addEventListener('online', procesarCola);
+let ocultaDesde = 0;
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
+  if (document.hidden) { ocultaDesde = Date.now(); return; }
+  if (Date.now() - ocultaDesde > 5 * 60e3) { diaOff = 0; semOff = 0; } // al volver (quizá otro día), no seguir anotando en el día que se miraba
   render();
   procesarCola();
   navigator.serviceWorker?.getRegistration().then((r) => r?.update()).catch(() => {}); // al volver a la app, buscar versión nueva
