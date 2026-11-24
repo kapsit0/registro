@@ -17,6 +17,8 @@ assert.equal(L.leerMonto('$ 4.500'), 4500);
 assert.equal(L.leerMonto(''), 0);
 assert.equal(L.lineaExcel({ t: new Date(2026, 10, 5, 9, 5, 59).toISOString(), monto: 1700, cat: 'Comida', detalle: 'pan; queso\n' }),
   '2026-11-05 09:05:59;1700;Comida;pan queso');
+assert.deepEqual([7, 10, 11, 15, 16, 19, 20, 23, 1].map((h) => L.momento(new Date(2026, 10, 23, h, 59))),
+  ['Desayuno', 'Desayuno', 'Almuerzo', 'Almuerzo', 'Once', 'Once', 'Cena', 'Cena', 'Desayuno']);
 assert.equal(L.sumar([{ kcal: 650 }, { kcal: '325' }, {}], 'kcal'), 975);
 const est = L.leerEstimacion({ choices: [{ message: { content: '```json\n{"nombre":"Arroz con pollo","alimentos":[' +
   '{"nombre":"arroz","gramos":150,"kcal":195.4,"proteina":4,"carbohidratos":42,"grasa":-1},' +

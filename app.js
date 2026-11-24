@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '7';
+const VERSION = '8';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -108,12 +108,20 @@ function renderComida() {
   ].filter(Boolean).join(' · ');
   $('#c-recientes').innerHTML = L.recientes(items)
     .map((i) => `<button type="button" data-rep="${i.id}">${esc(i.nombre)}<small>${L.miles(i.kcal)}</small></button>`).join('');
+  let grupo = '';
   $('#c-lista').innerHTML = del.length
     ? del.map((i) => {
+        const m = L.momento(new Date(i.t));
+        let cab = '';
+        if (m !== grupo) { // cabecera con subtotal, como en las apps de calorías
+          grupo = m;
+          const del_m = ok.filter((x) => L.momento(new Date(x.t)) === m);
+          cab = `<li class="grupo"><span>${m}</span><span>${L.miles(L.sumar(del_m, 'kcal'))}</span></li>`;
+        }
         const porc = i.porcion && i.porcion !== 1 ? ` · ${L.fraccion(i.porcion)} porción` : '';
         const sub = i.estado === 'ok' ? `P${i.p} C${i.c} G${i.g}${porc}` : i.nota || 'estimando';
         const clase = i.estado === 'ok' ? '' : i.estado === 'error' ? 'error' : 'pendiente';
-        return `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>` +
+        return cab + `<li class="${clase}" data-id="${i.id}"><span class="hora">${L.hora(new Date(i.t))}</span>` +
           `<span class="txt"><b>${esc(i.nombre || i.texto || 'Foto')}</b><small>${esc(sub)}</small></span>` +
           `<span class="num">${i.estado === 'ok' ? L.miles(i.kcal) : '…'}</span></li>`;
       }).join('')

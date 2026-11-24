@@ -126,6 +126,12 @@ const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 export const diaCorto = (d) => `${DIAS[d.getDay()]} ${d.getDate()}`;
 
+// Comidas del día en Chile, por la hora en que se anotaron.
+export const momento = (d) => {
+  const h = d.getHours();
+  return h < 11 ? 'Desayuno' : h < 16 ? 'Almuerzo' : h < 20 ? 'Once' : 'Cena';
+};
+
 // Lunes 00:00 local de la semana de d (semana lunes–domingo, como el panel de Finanzas).
 export function inicioSemana(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
