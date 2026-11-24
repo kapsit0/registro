@@ -1,0 +1,205 @@
+# Prueba de punta a punta (Playwright + Pillow): MOTOR=chrome|webkit python e2e.py <carpeta app> <carpeta capturas>
+"""Prueba de punta a punta de Registro en Chrome (390 px): gasto, comida texto y foto con IA real, offline, edición, export."""
+from datetime import datetime, timedelta
+import re
+import http.server, json, os, sys, threading, functools, time
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+from playwright.sync_api import sync_playwright, expect
+
+APP = Path(sys.argv[1])
+OUT = Path(sys.argv[2]); OUT.mkdir(exist_ok=True)
+CLAVE = (Path.home() / ".config/comida/clave_openrouter").read_text().strip()
+
+h = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(APP))
+http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), h)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+URL = f"http://127.0.0.1:{srv.server_port}/"
+
+# foto de prueba: una lata con texto legible
+foto = OUT / "lata.jpg"
+im = Image.new("RGB", (1600, 1200), "#c8102e"); d = ImageDraw.Draw(im)
+f = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 150)
+d.text((120, 400), "Coca-Cola", fill="white", font=f); d.text((120, 620), "lata 350 ml", fill="white", font=f)
+im.save(foto, quality=90)
+
+errores = []
+with sync_playwright() as p:
+    MOTOR = os.environ.get("MOTOR", "chrome")  # chrome | webkit (motor de Safari, emulando iPhone)
+    if MOTOR == "webkit":
+        nav = p.webkit.launch(headless=True)
+        ctx = nav.new_context(**{**p.devices["iPhone 15"], "accept_downloads": True})
+    else:
+        nav = p.chromium.launch(channel="chrome", headless=True)
+        ctx = nav.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, accept_downloads=True)
+    ctx.add_init_script("delete Navigator.prototype.canShare; delete Navigator.prototype.share")  # Chrome Mac sí tiene hoja de compartir; aquí probamos la descarga
+    pg = ctx.new_page()
+    pg.on("response", lambda r: r.status >= 400 and print("404:", r.url))
+    pg.on("pageerror", lambda e: errores.append(str(e)))
+    pg.on("console", lambda m: m.type == "error" and errores.append(m.text))
+    pg.goto(URL)
+    pg.evaluate("c => localStorage.setItem('cfg', JSON.stringify({presupuesto: 30000, categorias: ['Comida','Combustible','Super','Hogar','Misc'], clave: c}))", CLAVE)
+    pg.evaluate("navigator.serviceWorker.ready")
+    pg.reload()
+    assert pg.evaluate("!!navigator.serviceWorker.controller"), "service worker no controla la página"
+
+    # comida por texto (IA real)
+    pg.fill("#c-texto", "1 plátano"); pg.press("#c-texto", "Enter")
+    expect(pg.locator("#c-lista li[data-id] .num").first).not_to_have_text("…", timeout=30000)
+    k1 = int(pg.text_content("#c-kcal").replace(".", ""))
+    assert 60 < k1 < 200, k1
+
+    # comida por foto (IA real, pasa por achicar → dataURL)
+    pg.set_input_files("#c-foto", str(foto))
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(2)
+    expect(pg.locator("#c-lista li[data-id] .num").nth(1)).not_to_have_text("…", timeout=30000)
+    k2 = int(pg.text_content("#c-kcal").replace(".", "")) - k1
+    assert 100 < k2 < 250, k2
+    print("foto:", pg.locator("#c-lista li[data-id]").nth(1).locator("b").inner_text(), k2, "kcal")
+    pg.screenshot(path=OUT / "comida-claro.png")
+
+    # gasto
+    pg.click("[data-tab=gasto]")
+    pg.fill("#g-monto", "4500"); pg.fill("#g-detalle", "almuerzo"); pg.click("[data-cat=Comida]")
+    expect(pg.locator("#g-quedan")).to_have_text("$ 25.500")
+    pg.fill("#g-monto", "2000"); pg.click("[data-cat='Hogar']")
+    expect(pg.locator("#g-quedan")).to_have_text("$ 23.500")
+    pg.screenshot(path=OUT / "gasto-claro.png")
+
+    # offline: recarga desde la caché, anota igual, estima al volver
+    ctx.set_offline(True)
+    pg.reload()
+    expect(pg.locator("#g-quedan")).to_have_text("$ 23.500")
+    pg.click("[data-tab=comida]")
+    pg.fill("#c-texto", "un yogurt natural"); pg.press("#c-texto", "Enter")
+    expect(pg.locator("#c-lista li[data-id]").nth(2)).to_contain_text("sin conexión")
+    pg.screenshot(path=OUT / "offline.png")
+    ctx.set_offline(False)
+    expect(pg.locator("#c-lista li[data-id] .num").nth(2)).not_to_have_text("…", timeout=40000)
+
+    # editar a mano
+    pg.click("#c-lista li[data-id] >> nth=0")
+    pg.fill("#editar [name=kcal]", "100"); pg.click("#editar button[value=guardar]")
+    expect(pg.locator("#c-lista li[data-id] .num").first).to_have_text("100")
+
+    # persistencia en IndexedDB
+    pg.reload()
+    assert pg.locator("#c-lista li[data-id]").count() == 3
+
+    # foto que no se puede abrir: la fila debe aparecer igual y terminar con un estado visible
+    malo = OUT / "mala.jpg"; malo.write_bytes(b"esto no es una imagen")
+    pg.set_input_files("#c-foto", str(malo))
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(4)
+    expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("preparando", timeout=30000)
+    expect(pg.locator("#c-lista li[data-id]").nth(3)).not_to_contain_text("estimando", timeout=30000)
+    print("foto mala:", pg.locator("#c-lista li[data-id]").nth(3).inner_text().replace("\n", " | "))
+    pg.screenshot(path=OUT / "foto-mala.png")
+    tipos = pg.evaluate("""() => new Promise(ok => { const r = indexedDB.open('registro'); r.onsuccess = () => {
+      const q = r.result.transaction('items').objectStore('items').getAll(); q.onsuccess = () => ok(q.result.filter(i => i.foto).map(i => typeof i.foto)); }; })""")
+    assert tipos == ["string"], f"foto guardada como {tipos} (debe ser texto, no Blob)"
+
+    # export Excel (en el Mac no hay hoja de compartir → descarga)
+    pg.click("#abrir-ajustes")
+    with pg.expect_download() as dl:
+        pg.click("#exportar-excel")
+    lineas = Path(dl.value.path()).read_text().strip().split("\n")
+    assert len(lineas) == 2 and lineas[0].endswith(";4500;Comida;almuerzo") and lineas[1].endswith(";2000;Hogar;"), lineas
+    pg.click("#ajustes button[value=ok]")
+
+    # porciones sin escribir: ½ del plato y menos de un alimento
+    pg.fill("#c-texto", "arroz con pollo"); pg.press("#c-texto", "Enter")
+    fila = pg.locator("#c-lista li[data-id]", has_text="ollo")
+    expect(fila.locator(".num")).not_to_have_text("…", timeout=30000)
+    total = int(fila.locator(".num").inner_text().replace(".", ""))
+    fila.click()
+    assert pg.locator("#editar .alimentos li").count() >= 2, "no separó alimentos"
+    pg.click("#editar [data-porc='0.5']")
+    medio = int(pg.input_value("#editar [name=kcal]"))
+    assert abs(medio - total / 2) <= 1, (total, medio)
+    pg.locator("#editar .alimentos li").first.locator("button[data-d='-1']").click()
+    expect(pg.locator("#editar .alimentos li").first.locator(".paso b")).to_have_text("¾")
+    final = int(pg.input_value("#editar [name=kcal]"))
+    assert final < medio, (medio, final)
+    pg.screenshot(path=OUT / "porciones.png")
+    pg.click("#editar button[value=guardar]")
+    expect(fila).to_contain_text("½ porción")
+    assert int(fila.locator(".num").inner_text().replace(".", "")) == final
+    print(f"porciones: {total} → ½ {medio} → primer alimento ¾ {final}")
+
+    # clave mala → "clave inválida"; al pegar la buena (con texto alrededor) se reintenta sola
+    pg.click("#abrir-ajustes"); pg.fill("#ajustes [name=clave]", "sk-or-v1-malo"); pg.click("#ajustes button[value=ok]")
+    pg.fill("#c-texto", "1 manzana"); pg.press("#c-texto", "Enter")
+    fila = pg.locator("#c-lista li[data-id]", has_text="manzana")
+    expect(fila).to_contain_text("clave inválida", timeout=30000)
+    pg.click("#abrir-ajustes"); pg.fill("#ajustes [name=clave]", "Clave OpenRouter: " + CLAVE + " "); pg.click("#ajustes button[value=ok]")
+    expect(pg.locator("#c-lista li[data-id]", has_text="anzana").locator(".num")).not_to_have_text("…", timeout=30000)
+    assert pg.evaluate("JSON.parse(localStorage.cfg).clave") == CLAVE
+    print("clave nueva: reintentó solo")
+
+    # v6: recientes sin internet + deshacer, galería, borrar con deshacer, meta, mover a ayer
+    ctx.set_offline(True)
+    pg.click("[data-tab=comida]")
+    n0 = pg.locator("#c-lista li[data-id]").count()
+    k0 = int(pg.text_content("#c-kcal").replace(".", ""))
+    chip = pg.locator("#c-recientes button", has_text="látano")
+    expect(chip).to_have_count(1)
+    chip.click()
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0 + 1)
+    assert int(pg.text_content("#c-kcal").replace(".", "")) > k0
+    pg.click("#aviso button")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
+    pg.set_input_files("#c-foto-galeria", str(foto))
+    expect(pg.locator("#c-lista li[data-id]").nth(n0)).to_contain_text("sin conexión")
+    pg.locator("#c-lista li[data-id]").nth(n0).click(); pg.click("#editar button[value=borrar]")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
+    pg.click("#aviso button")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0 + 1)
+    pg.locator("#c-lista li[data-id]").nth(n0).click(); pg.click("#editar button[value=borrar]")
+    expect(pg.locator("#c-lista li[data-id]")).to_have_count(n0)
+    ctx.set_offline(False)
+    pg.click("#abrir-ajustes"); pg.fill("#ajustes [name=meta]", "2000"); pg.click("#ajustes button[value=ok]")
+    expect(pg.locator("#c-barra")).to_be_visible()
+    expect(pg.locator("#c-macros")).to_contain_text("quedan")
+    pg.screenshot(path=OUT / "v6-comida.png")
+    pg.locator("#c-lista li[data-id]", has_text="ogurt").click()
+    pg.fill("#editar [name=t]", (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT08:00"))
+    pg.click("#editar button[value=guardar]")
+    expect(pg.locator("#c-lista li[data-id]", has_text="ogurt")).to_have_count(0)
+    pg.click("[data-dia='-1']")
+    expect(pg.locator("#c-lista li[data-id]", has_text="ogurt")).to_contain_text("08:00")
+    pg.click("[data-dia='1']")
+    print("v6: recientes, galería, deshacer, meta y hora ok")
+
+    # v7: franja semanal, volver a hoy, gasto frecuente con deshacer
+    expect(pg.locator("#c-semana button")).to_have_count(7)
+    expect(pg.locator("#c-semana button.sel")).to_have_class(re.compile("con"))
+    pg.click("[data-dia='-1']")
+    expect(pg.locator("#c-semana button.sel")).to_have_class(re.compile("con"))  # ayer tiene el yogurt
+    pg.click("#c-dia")
+    expect(pg.locator("#c-dia")).to_have_text("Hoy")
+    pg.click("[data-tab=gasto]")
+    q0 = pg.text_content("#g-quedan")
+    pg.locator("#g-recientes button", has_text="almuerzo").click()
+    expect(pg.locator("#g-quedan")).not_to_have_text(q0)
+    pg.click("#aviso button")
+    expect(pg.locator("#g-quedan")).to_have_text(q0)
+    pg.screenshot(path=OUT / "v7-gasto.png")
+    pg.click("[data-tab=comida]")
+    pg.screenshot(path=OUT / "v7-comida.png")
+    print("v7: semana, hoy y gasto frecuente ok")
+
+    # modo oscuro
+    pg.emulate_media(color_scheme="dark")
+    pg.screenshot(path=OUT / "comida-oscuro.png")
+    pg.click("#c-lista li[data-id] >> nth=1")
+    pg.screenshot(path=OUT / "editar-oscuro.png")
+    pg.keyboard.press("Escape")
+    pg.click("[data-tab=gasto]")
+    pg.screenshot(path=OUT / "gasto-oscuro.png")
+    nav.close()
+
+print("export:", lineas)
+errores = [e for e in errores if "status of 400" not in e and "status of 401" not in e]  # la foto mala la rechaza OpenRouter: esperado
+assert not errores, errores
+print("e2e: ok")
