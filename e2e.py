@@ -236,6 +236,8 @@ with sync_playwright() as p:
     pg.locator("#g-lista li[data-id]", has_text="Hogar").click()
     pg.fill("#editar [name=detalle]", "ampolleta"); pg.press("#editar [name=detalle]", "Enter")
     expect(pg.locator("#g-lista li[data-id]", has_text="ampolleta")).to_have_count(1)
+    expect(pg.locator("#aviso")).to_contain_text("En el Excel, borra la fila anterior")  # v18: ya se había exportado
+    pg.screenshot(path=OUT / "v18-aviso-excel.png")
     pg.click("[data-tab=comida]")
     if MOTOR == "chrome":  # deslizar: toques por DevTools
         cdp_t = ctx.new_cdp_session(pg)

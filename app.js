@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '17';
+const VERSION = '18';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -485,15 +485,19 @@ function abrirEditar(id) {
     const v = Object.fromEntries(new FormData(f));
     const accion = dlg.returnValue;
     dlg.returnValue = '';
+    // el importador de Finanzas solo agrega líneas: un gasto ya exportado que se cambia o borra hay que arreglarlo allá
+    const enExcel = it.tipo === 'gasto' && exportados().includes(it.id);
+    const lineaAntes = it.tipo === 'gasto' && L.lineaExcel(it);
     if (accion === 'guardar' && v.t && !isNaN(new Date(v.t))) it.t = new Date(v.t).toISOString(); // datetime-local = hora local
     if (accion === 'borrar') {
       await borrar(it);
-      aviso('Borrado', 5000, ['Deshacer', async () => { await guardar(it); render(); }]);
+      aviso(enExcel ? 'Borrado aquí; en el Excel sigue' : 'Borrado', 5000, ['Deshacer', async () => { await guardar(it); render(); }]);
     } else if (accion === 'guardar' && it.tipo === 'gasto') {
       it.monto = L.leerMonto(v.monto) || it.monto;
       it.cat = v.cat;
       it.detalle = v.detalle.trim();
       await guardar(it);
+      if (enExcel && L.lineaExcel(it) !== lineaAntes) aviso('En el Excel, borra la fila anterior', 6000);
     } else if (accion === 'guardar') {
       it.nombre = v.nombre.trim() || it.nombre;
       if (manual && v.kcal !== '') {
@@ -601,9 +605,15 @@ $('#guardar-icloud').addEventListener('click', async () => {
   ]);
   if (!ok) return;
   localStorage.setItem('guardado', new Date().toISOString());
+  try { localStorage.setItem('exportados', JSON.stringify(gastos.map((g) => g.id))); } catch {}
   localStorage.setItem('cambios', '0');
   pintarGuardado();
 });
+
+// ids de los gastos que ya fueron al Excel (en el último «Guardar en iCloud»)
+function exportados() {
+  try { return JSON.parse(localStorage.getItem('exportados') || '[]'); } catch { return []; }
+}
 
 // Punto en Ajustes: hay cambios sin guardar y lo último guardado (o el dato más viejo) tiene más de 3 días.
 function pintarGuardado() {
