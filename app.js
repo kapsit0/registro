@@ -1,6 +1,6 @@
 import * as L from './logica.js';
 
-const VERSION = '4';
+const VERSION = '5';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -23,17 +23,18 @@ async function tx(modo, f) {
     const t = db.transaction('items', modo);
     const r = f(t.objectStore('items'));
     t.oncomplete = () => ok(r.result);
-    t.onerror = t.onabort = () => mal(t.error);
+    // el error de la operación viene en el evento; t.error sigue null hasta que la transacción aborta
+    t.onerror = t.onabort = (ev) => mal(ev.target.error || t.error || new Error('base de datos'));
   });
 }
 let items = [];
 async function guardar(it) {
   if (!items.includes(it)) items.push(it);
-  try { await tx('readwrite', (s) => s.put(it)); } catch (e) { aviso('No se pudo guardar: ' + e.message); }
+  try { await tx('readwrite', (s) => s.put(it)); } catch (e) { aviso('No se pudo guardar: ' + motivo(e), 8000); }
 }
 async function borrar(it) {
   items = items.filter((i) => i !== it);
-  try { await tx('readwrite', (s) => s.delete(it.id)); } catch (e) { aviso('No se pudo borrar: ' + e.message); }
+  try { await tx('readwrite', (s) => s.delete(it.id)); } catch (e) { aviso('No se pudo borrar: ' + motivo(e), 8000); }
 }
 
 // ---------- estado de la vista ----------
@@ -49,8 +50,9 @@ function aviso(txt, ms = 2200) {
   aviso.t = setTimeout(() => a.classList.remove('ver'), ms);
 }
 // errores inesperados a la vista (en el iPhone no hay consola)
-addEventListener('error', (e) => aviso('Error: ' + e.message, 8000));
-addEventListener('unhandledrejection', (e) => aviso('Error: ' + (e.reason?.message || e.reason), 8000));
+addEventListener('error', (e) => aviso('Error: ' + motivo(e), 8000));
+addEventListener('unhandledrejection', (e) => aviso('Error: ' + motivo(e.reason), 8000));
+function motivo(e) { return (e && (e.message || e.name)) || String(e); }
 
 function render() {
   for (const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', b.dataset.tab === tab);
@@ -141,14 +143,17 @@ async function achicar(archivo) {
     c.width = Math.round(img.naturalWidth * k);
     c.height = Math.round(img.naturalHeight * k);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise((ok, mal) => c.toBlob((b) => (b ? ok(b) : mal(new Error('no se pudo achicar'))), 'image/jpeg', 0.75));
+    // texto (data URL), no Blob: Safari en iPhone falla al guardar Blobs en IndexedDB
+    const url64 = c.toDataURL('image/jpeg', 0.75);
+    if (!url64.startsWith('data:image/jpeg')) throw new Error('no se pudo achicar');
+    return url64;
   } finally {
     URL.revokeObjectURL(url);
   }
 }
 
 async function estimar(it) {
-  const imagen = it.foto ? await aDataURL(it.foto) : null;
+  const imagen = typeof it.foto === 'string' ? it.foto : it.foto ? await aDataURL(it.foto) : null; // Blob = versiones antiguas
   const anterior = it.kcal != null ? L.describir(it) : '';
   let r;
   try {
@@ -242,7 +247,8 @@ $('#c-foto').addEventListener('change', async (e) => {
   try {
     it.foto = await achicar(archivo);
   } catch (err) {
-    it.foto = archivo; // sin achicar: Gemini acepta la original (incluso HEIC), solo pesa más
+    try { it.foto = await aDataURL(archivo); } // sin achicar: Gemini acepta la original (incluso HEIC), solo pesa más
+    catch (err2) { Object.assign(it, { estado: 'error', nota: 'no se pudo leer la foto: ' + motivo(err2) }); await guardar(it); render(); return; }
     it.nota = 'foto original (' + err.message + ')';
   }
   e.target.value = ''; // recién ahora: en Safari limpiar antes puede invalidar el archivo de la cámara
@@ -433,7 +439,7 @@ setInterval(() => { if (items.some((i) => i.estado === 'pendiente')) procesarCol
 navigator.storage?.persist?.();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
-try { items = await tx('readonly', (s) => s.getAll()); } catch (e) { aviso('No se pudieron leer los datos: ' + e.message, 8000); }
+try { items = await tx('readonly', (s) => s.getAll()); } catch (e) { aviso('No se pudieron leer los datos: ' + motivo(e), 8000); }
 for (const it of items.filter((i) => i.estado === 'preparando')) { // la app se cerró a mitad de una foto
   Object.assign(it, { estado: 'error', nota: 'la foto no alcanzó a guardarse' });
   guardar(it);
